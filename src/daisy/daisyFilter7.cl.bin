@@ -18,7 +18,7 @@
 	.param .u32 convolve_x_param_5
 )
 {
-	.reg .f32 	%f<28>;
+	.reg .f32 	%f<57>;
 	.reg .pred 	%p<3>;
 	.reg .s32 	%r<60>;
 
@@ -69,32 +69,34 @@
 	shl.b32 	%r31, %r30, 2;
 	add.s32 	%r32, %r16, %r31;
 	ld.global.f32 	%f2, [%r32];
-	ld.const.f32 	%f3, [%r17];
-	mul.f32 	%f4, %f3, %f2;
-	ld.global.f32 	%f5, [%r32+4];
-	ld.const.f32 	%f6, [%r17+4];
-	mul.f32 	%f7, %f6, %f5;
-	ld.global.f32 	%f8, [%r32+8];
-	ld.const.f32 	%f9, [%r17+8];
-	mul.f32 	%f10, %f9, %f8;
-	ld.global.f32 	%f11, [%r32+12];
-	ld.const.f32 	%f12, [%r17+12];
-	mul.f32 	%f13, %f12, %f11;
-	add.f32 	%f14, %f4, %f7;
-	add.f32 	%f15, %f14, %f10;
-	add.f32 	%f16, %f15, %f13;
-	ld.global.f32 	%f17, [%r32+16];
-	ld.const.f32 	%f18, [%r17+16];
-	mul.f32 	%f19, %f18, %f17;
-	ld.global.f32 	%f20, [%r32+20];
-	ld.const.f32 	%f21, [%r17+20];
-	mul.f32 	%f22, %f21, %f20;
-	ld.global.f32 	%f23, [%r32+24];
-	ld.const.f32 	%f24, [%r17+24];
-	mul.f32 	%f25, %f24, %f23;
-	add.f32 	%f26, %f16, %f19;
-	add.f32 	%f27, %f26, %f22;
-	add.f32 	%f1, %f27, %f25;
+	ld.global.f32 	%f3, [%r32+4];
+	ld.global.f32 	%f4, [%r32+8];
+	ld.global.f32 	%f5, [%r32+12];
+	ld.const.f32 	%f6, [%r17];
+	ld.const.f32 	%f7, [%r17+4];
+	ld.const.f32 	%f8, [%r17+8];
+	ld.const.f32 	%f9, [%r17+12];
+	mul.f32 	%f33, %f2, %f6;
+	mul.f32 	%f34, %f3, %f7;
+	mul.f32 	%f35, %f4, %f8;
+	mul.f32 	%f36, %f5, %f9;
+	ld.global.f32 	%f10, [%r32+16];
+	ld.global.f32 	%f11, [%r32+20];
+	ld.global.f32 	%f12, [%r32+24];
+	ld.const.f32 	%f13, [%r17+16];
+	ld.const.f32 	%f14, [%r17+20];
+	ld.const.f32 	%f15, [%r17+24];
+	sub.f32 	%f18, %f33, %f36;
+	mul.f32 	%f50, %f10, %f13;
+	mul.f32 	%f51, %f11, %f14;
+	mul.f32 	%f52, %f12, %f15;
+	add.f32 	%f53, %f18, %f36;
+	add.f32 	%f54, %f34, %f50;
+	add.f32 	%f55, %f35, %f51;
+	add.f32 	%f56, %f36, %f52;
+	add.f32 	%f21, %f53, %f54;
+	add.f32 	%f23, %f21, %f55;
+	add.f32 	%f1, %f23, %f56;
 	div.s32 	%r6, %r5, %r3;
 	setp.eq.s32 	%p1, %r6, %r4;
 	shl.b32 	%r33, %r5, 2;
@@ -268,10 +270,10 @@ BB1_3:
 	ret;
 
 BB1_4:
-	st.global.f32 	[%r4], %f1;
-	st.global.f32 	[%r4+-4], %f1;
-	st.global.f32 	[%r4+-8], %f1;
 	st.global.f32 	[%r4+-12], %f1;
+	st.global.f32 	[%r4+-8], %f1;
+	st.global.f32 	[%r4+-4], %f1;
+	st.global.f32 	[%r4], %f1;
 	ret;
 }
 

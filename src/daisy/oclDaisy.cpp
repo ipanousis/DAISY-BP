@@ -120,7 +120,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_f7x, 1, NULL, 
                                  &(daisyCl->workerSize), &(daisyCl->groupSize), 0, 
                                  NULL, NULL);
-  
+
   // convolve Y
   clSetKernelArg(daisy->oclPrograms.kernel_f7y, 0, sizeof(convBuffer), (void*)&convBuffer);
   clSetKernelArg(daisy->oclPrograms.kernel_f7y, 1, sizeof(inputBuffer), (void*)&inputBuffer);
@@ -133,15 +133,14 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
                                  &(daisyCl->workerSize), &(daisyCl->groupSize), 0, 
                                  NULL, NULL);
 
-  error = clEnqueueReadBuffer(daisyCl->queue, inputBuffer, CL_TRUE, 
-                              0, fullWidth * fullHeight * sizeof(float), inputArray, 
-                              0, NULL, NULL);
-  
   printf("Convolution done!\n");
 
   // gradient X
+
   // gradient Y
+
   // get other 6 gradients with X,Y + sin/cos
+
   // smooth all with size 13 - keep
   // smooth all with size 23 - keep
   // smooth all with size 29 - keep

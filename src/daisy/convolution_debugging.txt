@@ -3,10 +3,6 @@
                                        7 * sizeof(int),
                                        (void*)NULL, &error);*/
 
-  float * testArray = (float*)malloc(sizeof(float) * fullWidth * 25);
-  error = clEnqueueReadBuffer(daisyCl->queue, convBuffer, CL_TRUE,
-                      fullWidth * 3 * sizeof(float), fullWidth * sizeof(float), testArray,
-                      0, NULL, NULL);
 
   /*int * debugOut = (int*)malloc(sizeof(int) * 7);
   error = clEnqueueReadBuffer(daisyCl->queue, debugBuffer, CL_TRUE,
@@ -21,6 +17,11 @@
   for(k = 0; k < 7; k++)
     printf("debugBuffer[%d] = %d\n",k,debugOut[k]);*/
   cl_uint k;
+
+  float * testArray = (float*)malloc(sizeof(float) * fullWidth * 25);
+  error = clEnqueueReadBuffer(daisyCl->queue, convBuffer, CL_TRUE,
+                      fullWidth * 3 * sizeof(float), fullWidth * sizeof(float), testArray,
+                      0, NULL, NULL);
 
   printf("What was before: %f",inputArray[fullWidth * 3]);
   for(k = 1; k < 25; k++)
