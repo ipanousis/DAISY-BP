@@ -1,0 +1,3 @@
+#!/bin/sh
+cd $PROJ
+g++ -I$PROJ/include -lOpenCL -ljpeg -lpng -fno-strict-aliasing -Wall -fPIC -O3 -DHAVE_INLINE -DGSL_RANGE_CHECK_OFF -DWITH_PNG -DWITH_JPEG src/daisy/main.cpp src/kutility/image_io_bmp.cpp src/kutility/image_io_png.cpp src/kutility/image_io_pnm.cpp src/kutility/image_io_jpeg.cpp src/kutility/image_manipulation.cpp src/kutility/interaction.cpp src/kutility/general.cpp src/ocl/cachedConstructs.c src/ocl/cachedProgram.c src/daisy/oclDaisy.cpp -o src/daisy/gdaisy
