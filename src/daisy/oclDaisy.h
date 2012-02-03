@@ -34,11 +34,13 @@ typedef struct daisy_params_tag{
   unsigned char * array;
   int width;
   int height;
+  int orientationsNo;
+  int smoothingsNo;
   ocl_daisy_programs oclPrograms;
 } daisy_params;
 #endif
 
-daisy_params * newDaisyParams(unsigned char*, int, int);
+daisy_params * newDaisyParams(unsigned char*, int, int, int, int);
 
 int initOcl(daisy_params *, ocl_constructs *);
 

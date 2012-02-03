@@ -1,11 +1,14 @@
 #include "oclDaisy.h"
 
-daisy_params * newDaisyParams(unsigned char* array, int height, int width){
+daisy_params * newDaisyParams(unsigned char* array, int height, int width,
+                              int orientationsNo, int smoothingsNo){
 
   daisy_params * params = (daisy_params*) malloc(sizeof(daisy_params));
   params->array = array;
   params->height = height;
   params->width = width;
+  params->orientationsNo = orientationsNo;
+  params->smoothingsNo = smoothingsNo;
 
   return params;
 }
@@ -38,7 +41,7 @@ int initOcl(daisy_params * daisy, ocl_constructs * daisyCl){
   //sprintf(options, "-DFILTER_SIZE=%d -DARRAY_HEIGHT=%d -DARRAY_WIDTH=%d", 7, daisy->height, daisy->width);
   //const char * opts = options;
 
-  // Build/Reuse OpenCL program
+  // Build denoising filter
   error = buildCachedProgram(daisyCl, "daisyFilter7.cl", options);
 
   if(daisyCl->program == NULL){
@@ -51,6 +54,25 @@ int initOcl(daisy_params * daisy, ocl_constructs * daisyCl){
   // Prepare the kernel
   daisy->oclPrograms.kernel_f7x = clCreateKernel(daisy->oclPrograms.program_f7, "convolve_x", &error);
   daisy->oclPrograms.kernel_f7y = clCreateKernel(daisy->oclPrograms.program_f7, "convolve_y", &error);
+
+  if(error){
+    fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
+    return 1;
+  }
+
+  // Build gradient kernel
+  daisyCl->program = NULL;
+
+  error = buildCachedProgram(daisyCl, "daisyGradient8.cl", options);
+
+  if(daisyCl->program == NULL){
+    fprintf(stderr, "oclDaisy.cpp::oclDaisy buildCachedProgram returned NULL, cannot continue\n");
+    return 1;
+  }
+
+  daisy->oclPrograms.program_gAll = daisyCl->program;
+
+  daisy->oclPrograms.kernel_gAll = clCreateKernel(daisy->oclPrograms.program_gAll, "gradient8", &error);
 
   if(error){
     fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
@@ -90,13 +112,13 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   int filter7Size = 7;
   float filter7[7] = {0.036633,0.11128,0.21675,0.27068,0.21675,0.11128,0.036633};
 
-  cl_mem inputBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                                     fullWidth * fullHeight * sizeof(cl_float),
-                                     (void*)inputArray, &error);
+  cl_mem convBufferA = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                                      fullWidth * fullHeight * sizeof(cl_float),
+                                      (void*)inputArray, &error);
                                           
-  cl_mem convBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
-                                     fullWidth * fullHeight * sizeof(cl_float),
-                                     (void*)NULL, &error);
+  cl_mem convBufferB = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
+                                      fullWidth * fullHeight * sizeof(cl_float),
+                                      (void*)NULL, &error);
 
   cl_mem filterBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                        filter7Size * sizeof(cl_float),
@@ -109,38 +131,82 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   // Prepare the kernel
 
-  // convolve X
-  clSetKernelArg(daisy->oclPrograms.kernel_f7x, 0, sizeof(inputBuffer), (void*)&inputBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f7x, 1, sizeof(convBuffer), (void*)&convBuffer);
+  // convolve X - A to B
+  clSetKernelArg(daisy->oclPrograms.kernel_f7x, 0, sizeof(convBufferA), (void*)&convBufferA);
+  clSetKernelArg(daisy->oclPrograms.kernel_f7x, 1, sizeof(convBufferB), (void*)&convBufferB);
   clSetKernelArg(daisy->oclPrograms.kernel_f7x, 2, sizeof(filterBuffer), (void*)&filterBuffer);
   clSetKernelArg(daisy->oclPrograms.kernel_f7x, 3, sizeof(int), (void*)&filter7Size);
   clSetKernelArg(daisy->oclPrograms.kernel_f7x, 4, sizeof(int), (void*)&(daisy->width));
   clSetKernelArg(daisy->oclPrograms.kernel_f7x, 5, sizeof(int), (void*)&(daisy->height));
 
-  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_f7x, 1, NULL, 
+  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_f7x, CL_TRUE, NULL, 
                                  &(daisyCl->workerSize), &(daisyCl->groupSize), 0, 
                                  NULL, NULL);
 
-  // convolve Y
-  clSetKernelArg(daisy->oclPrograms.kernel_f7y, 0, sizeof(convBuffer), (void*)&convBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f7y, 1, sizeof(inputBuffer), (void*)&inputBuffer);
+  // convolve Y - B to A
+  clSetKernelArg(daisy->oclPrograms.kernel_f7y, 0, sizeof(convBufferB), (void*)&convBufferB);
+  clSetKernelArg(daisy->oclPrograms.kernel_f7y, 1, sizeof(convBufferA), (void*)&convBufferA);
   clSetKernelArg(daisy->oclPrograms.kernel_f7y, 2, sizeof(filterBuffer), (void*)&filterBuffer);
   clSetKernelArg(daisy->oclPrograms.kernel_f7y, 3, sizeof(int), (void*)&filter7Size);
   clSetKernelArg(daisy->oclPrograms.kernel_f7y, 4, sizeof(int), (void*)&(daisy->width));
   clSetKernelArg(daisy->oclPrograms.kernel_f7y, 5, sizeof(int), (void*)&(daisy->height));
 
-  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_f7y, 1, NULL, 
+  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_f7y, CL_TRUE, NULL, 
                                  &(daisyCl->workerSize), &(daisyCl->groupSize), 0, 
                                  NULL, NULL);
 
-  printf("Convolution done!\n");
+  printf("Convolution to 1.6 sent!\n");
 
-  // gradient X
+  /*float * testArray = (float*)malloc(sizeof(float) * fullWidth * fullHeight * 3);
+  error = clEnqueueReadBuffer(daisyCl->queue, convBufferB, CL_TRUE,
+                      3 * sizeof(float), fullWidth * 25 * sizeof(float), testArray,
+                      0, NULL, NULL);*/
 
-  // gradient Y
 
-  // get other 6 gradients with X,Y + sin/cos
+  cl_uint k;
 
+  clFinish(daisyCl->queue);
+  error = clEnqueueReadBuffer(daisyCl->queue, convBufferA, CL_TRUE,
+                      0, 3 + fullWidth * 25 * sizeof(float), inputArray,
+                      0, NULL, NULL);
+  clFinish(daisyCl->queue);
+
+  printf("\nDenoising Output: %f",inputArray[3]);
+  for(k = 1; k < 25; k++)
+    printf(", %f", inputArray[3 + k * fullWidth]);
+  printf("\n");
+
+  // gradients for 8 orientations
+  cl_mem massBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
+                                     daisy->orientationsNo * daisy->smoothingsNo * 
+                                     fullWidth * fullHeight * sizeof(cl_float),
+                                     (void*)NULL, &error);
+ 
+  clSetKernelArg(daisy->oclPrograms.kernel_gAll, 0, sizeof(convBufferA), (void*)&convBufferA);
+  clSetKernelArg(daisy->oclPrograms.kernel_gAll, 1, sizeof(massBuffer), (void*)&massBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_gAll, 2, sizeof(int), (void*)&(daisy->width));
+  clSetKernelArg(daisy->oclPrograms.kernel_gAll, 3, sizeof(int), (void*)&(daisy->height));
+  clSetKernelArg(daisy->oclPrograms.kernel_gAll, 4, sizeof(int), (void*)&largestKernelHalo);
+
+  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_gAll, CL_TRUE, NULL, 
+                                 &(daisyCl->workerSize), &(daisyCl->groupSize), 0, 
+                                 NULL, NULL);
+
+
+  float * testArray = (float*)malloc(sizeof(float) * fullWidth * fullHeight * 3);
+  error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
+                      fullWidth * 3 * sizeof(float), fullWidth * fullHeight * 3 * sizeof(float), testArray,
+                      0, NULL, NULL);
+
+  clFinish(daisyCl->queue);
+  printf("\nBefore Gradient: %f",inputArray[fullWidth * 3]);
+  for(k = 1; k < 25; k++)
+    printf(", %f", inputArray[fullWidth * 3 + k]);
+  printf("\nAfter Gradient (X): %f",testArray[0]);
+  for(k = 1; k < 25; k++)
+    printf(", %f", testArray[k]);
+  printf("\n");
+  
   // smooth all with size 13 - keep
   // smooth all with size 23 - keep
   // smooth all with size 29 - keep

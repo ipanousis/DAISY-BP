@@ -32,7 +32,7 @@
   printf("\n");
 
 
-  error = clEnqueueReadBuffer(daisyCl->queue, convBuffer, CL_TRUE,
+  error = clEnqueueReadBuffer(daisyCl->queue, convBufferB, CL_TRUE,
                       3 * sizeof(float), fullWidth * 25 * sizeof(float), testArray,
                       0, NULL, NULL);
 
@@ -44,4 +44,30 @@
   printf("\nAnd finally: %f",inputArray[3]);
   for(k = 1; k < 25; k++)
     printf(", %f", inputArray[3 + k * fullWidth]);
+  printf("\n");
+
+
+
+  /*float * testArray = (float*)malloc(sizeof(float) * fullWidth * fullHeight * 3);
+  error = clEnqueueReadBuffer(daisyCl->queue, convBufferB, CL_TRUE,
+                      3 * sizeof(float), fullWidth * 25 * sizeof(float), testArray,
+                      0, NULL, NULL);*/
+
+
+  cl_uint k;
+
+  clFinish(daisyCl->queue);
+  error = clEnqueueReadBuffer(daisyCl->queue, convBufferA, CL_TRUE,
+                      3 * sizeof(float), fullWidth * 25 * sizeof(float), inputArray,
+                      0, NULL, NULL);
+  clFinish(daisyCl->queue);
+
+  /*printf("What was before (Y): %f",testArray[0]);
+  for(k = 1; k < 25; k++)
+    printf(", %f", testArray[k * fullWidth]);
+  printf("\n");*/
+
+  printf("\nAnd finally: %f",inputArray[0]);
+  for(k = 1; k < 25; k++)
+    printf(", %f", inputArray[k * fullWidth]);
   printf("\n");

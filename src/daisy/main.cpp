@@ -37,7 +37,7 @@ int main( int argc, char **argv  )
   }
   
   ocl_constructs * daisyCl = newOclConstructs(0,0,0);
-  daisy_params * daisy = newDaisyParams(srcArray, height, width);
+  daisy_params * daisy = newDaisyParams(srcArray, height, width, 8, 3);
   initOcl(daisy, daisyCl);
   oclDaisy(daisy, daisyCl);
 
