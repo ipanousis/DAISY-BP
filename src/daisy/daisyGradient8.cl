@@ -8,6 +8,8 @@ __kernel void gradient8(__global float * srcArray,
   // get x get y and store 'em
   const int id = (get_global_id(0) / arrWidth + arrHalo) * (arrHalo * 2 + arrWidth) + 
                                      arrHalo + get_global_id(0) % arrWidth;
+  dstArray[0] = id;
+  /*
 
   srcArray += id;
   dstArray += id;
@@ -53,5 +55,5 @@ __kernel void gradient8(__global float * srcArray,
   dstArray[5*offset] = gradients.s5;
   dstArray[6*offset] = gradients.s6;
   dstArray[7*offset] = gradients.s7;
-
+  */
 }

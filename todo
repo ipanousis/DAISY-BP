@@ -6,6 +6,7 @@ HIGH
 ---
 MEDIUM
 ---
+gradient borders
 test data
 record performance test results with visual profiler
 ---
@@ -17,6 +18,7 @@ LOW
 software license?
 *belief propagation matching - heavy reading papers/code understand bp - understood up until a point, read sift flow code or other to understand properly, wait until DAISY is done
 -choose objective function for BP - vaguely done, leave for later
+GIT setup online github
 ---
 WAIT
 ---
