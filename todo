@@ -1,14 +1,17 @@
 ---
 HIGH
 ---
-*get DAISY running correctly
 *DAISY implementation baby oh yeah
+  - transpose
+  - profile + optimise (1024 sections)
+  - manage sectioning into 1024x1024 sections for larger images
 ---
 MEDIUM
 ---
 gradient borders
 test data
 record performance test results with visual profiler
+BP implementation
 ---
 LOW
 ---
