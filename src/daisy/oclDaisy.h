@@ -24,7 +24,8 @@ typedef struct ocl_daisy_programs_tag{
   cl_kernel kernel_f11y;
   cl_kernel kernel_f23x;
   cl_kernel kernel_f23y;
-  cl_kernel kernel_f29;
+  cl_kernel kernel_f29x;
+  cl_kernel kernel_f29y;
   cl_kernel kernel_fAny;
   cl_kernel kernel_gAny;
 } ocl_daisy_programs;

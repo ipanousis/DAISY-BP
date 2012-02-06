@@ -1,15 +1,17 @@
 #include "main.h"
 #include <stdio.h>
+#include <sys/time.h>
 
 using namespace kutility;
 
 int main( int argc, char **argv  )
 {
   int counter = 1;
-
+  struct timeval startTime,endTime;
   int width, height;
   uchar* srcArray = NULL;
-
+  //uchar* othArray = NULL;
+  gettimeofday(&startTime,NULL);
   /*
   double opy = -1;
   double opx = -1;
@@ -32,14 +34,31 @@ int main( int argc, char **argv  )
     filename = argv[++counter];
     // im = load_byte_image(filename,w,h);
     load_gray_image (filename, srcArray, height, width);
+    //load_gray_image (filename, othArray, height, width);
     printf("HxW=%dx%d\n",height, width);
     counter++;
   }
   
   ocl_constructs * daisyCl = newOclConstructs(0,0,0);
+  //ocl_constructs * daisyOcl = newOclConstructs(0,0,0);
   daisy_params * daisy = newDaisyParams(srcArray, height, width, 8, 3);
+
+  double start,end,diff;
+
   initOcl(daisy, daisyCl);
+  //initOcl(daisy, daisyOcl);
+
   oclDaisy(daisy, daisyCl);
+  //oclDaisy(daisy, daisyOcl);
+
+  gettimeofday(&endTime,NULL);
+
+  free(daisy->array);
+
+  start = startTime.tv_sec+(startTime.tv_usec/1000000.0);
+  end = endTime.tv_sec+(endTime.tv_usec/1000000.0);
+  diff = end-start;
+  printf("\nMain: %.3fs\n",diff);
 
   return 0;
 }
