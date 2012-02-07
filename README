@@ -1,0 +1,22 @@
+Third Year Project in Computer Science at Bath, UK. (2011-12)
+
+The project title is "Fast cross-device dense pixel correspondence using DAISY descriptors and OpenCL"
+
+It is aiming 
+
+1) to use OpenCL on graphics cards to implement the computation of the DAISY descriptor
+(cvlab.epfl.ch/alumni/tola/daisy.html) for an image in a dense fashion, ie compute a descriptor for 
+every pixel in the image, or a large subset.
+
+2) use Belief Propagation (on GPU again with OpenCL) to (after DAISY descriptor images have been computed
+for two images) to search for the pixel correspondence between two images. This is also aimed to be done
+densely, ie for as many descriptors as are available in the descriptor images
+
+The implementation of this application in OpenCL should broaden the usability/applicability of such an
+algorithm to a range of different hardware/software without specific system versions or requirements.
+This relies on the, currently strong, support of major OS/hardware developers towards OpenCL.
+
+Progress:
+07/02/12 - Implemented DAISY up until all the smoothing/gradient kernels, the data on the GPU now needs
+          to be transposed.... in a 4D type of transposition (AxBxCxD to CxDxAxB) ... fun!
+          After this DAISY will be done and optimisations will need to be made, before proceeding to BP.
