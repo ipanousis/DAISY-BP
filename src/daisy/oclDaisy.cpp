@@ -2,13 +2,13 @@
 #include <sys/time.h>
 
 daisy_params * newDaisyParams(unsigned char* array, int height, int width,
-                              int orientationsNo, int smoothingsNo){
+                              int gradientsNo, int smoothingsNo){
 
   daisy_params * params = (daisy_params*) malloc(sizeof(daisy_params));
   params->array = array;
   params->height = height;
   params->width = width;
-  params->orientationsNo = orientationsNo;
+  params->gradientsNo = gradientsNo;
   params->smoothingsNo = smoothingsNo;
 
   return params;
@@ -50,7 +50,7 @@ int initOcl(daisy_params * daisy, ocl_constructs * daisyCl){
 
   // Build denoising filter
   error = buildCachedProgram(daisyCl, "daisyKernels.cl", options);
-
+  
   if(daisyCl->program == NULL){
     fprintf(stderr, "oclDaisy.cpp::oclDaisy buildCachedProgram returned NULL, cannot continue\n");
     return 1;
@@ -97,7 +97,26 @@ int initOcl(daisy_params * daisy, ocl_constructs * daisyCl){
     fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
     return 1;
   }
+  /*
+  cl_program temp = daisyCl->program;
+
+  error = buildCachedProgram(daisyCl, "daisyRealKernels.cl", options);
   
+  daisy->oclPrograms.program_trans = daisyCl->program;
+  daisyCl->program = temp;
+
+  if(daisyCl->program == NULL){
+    fprintf(stderr, "oclDaisy.cpp::oclDaisy buildCachedProgram returned NULL, cannot continue\n");
+    return 1;
+  }
+
+  daisy->oclPrograms.kernel_trans = clCreateKernel(daisy->oclPrograms.program_trans, "transpose", &error);
+
+  if(error){
+    fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
+    return 1;
+  }*/
+
   return error;
 
 }
@@ -119,7 +138,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   gettimeofday(&startParaTime,NULL);
 
-  long int memorySize = daisy->orientationsNo * (daisy->smoothingsNo+1) * 
+  long int memorySize = daisy->gradientsNo * (daisy->smoothingsNo+1) * 
                         paddedWidth * paddedHeight * sizeof(cl_float);
 
   cl_mem massBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
@@ -449,6 +468,52 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
 
   // transpose
+
+  // a) transpose SxGxHxW to SxHxWxG first
+
+  /*__kernel void transpose(__global float * srcArray,
+                        __global float * dstArray,
+                        const    int     srcWidth,
+                        const    int     srcHeight,
+                        const    int     dstWidth,
+                        const    int     dstHeight,
+                        __local  float * lclArray)*/
+
+  cl_mem transBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
+                                      memorySize, (void*)NULL, &error);
+
+  int dstWidth  = daisy->paddedWidth * daisy->gradientsNo;
+  int dstHeight = daisy->paddedHeight;
+
+  int transGroupSizeX = 32;
+  int transGroupSizeY = 8;
+
+  int transWorkerSizeX = daisy->paddedWidth / transGroupSizeX;
+  int transWorkerSizeY = daisy->paddedHeight * daisy->smoothingsNo * daisy->gradientsNo;
+  
+  size_t transWorkerSize[2] = {transWorkerSizeX,transWorkerSizeY};
+  size_t transGroupSize[2]  = {transGroupSizeX,transGroupSizeY};
+
+  clSetKernelArg(daisy->oclPrograms.kernel_trans, 0, sizeof(massBuffer), (void*)&massBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_trans, 1, sizeof(transBuffer), (void*)&transBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_trans, 2, sizeof(float) * (transGroupSizeX+1) * transGroupSizeY, 0);
+  clSetKernelArg(daisy->oclPrograms.kernel_trans, 3, sizeof(int), (void*)&(daisy->paddedWidth));
+  clSetKernelArg(daisy->oclPrograms.kernel_trans, 4, sizeof(int), (void*)&(daisy->paddedHeight));
+  clSetKernelArg(daisy->oclPrograms.kernel_trans, 5, sizeof(int), (void*)&(dstWidth));
+  clSetKernelArg(daisy->oclPrograms.kernel_trans, 6, sizeof(int), (void*)&(dstHeight));
+
+  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_trans, 
+                                 2, NULL, 
+                                 transWorkerSize, transGroupSize, 
+                                 0, NULL, NULL);
+
+  printf("Sent off transpose!\n");
+
+  clFinish(daisyCl->queue);
+
+  
+
+  clFinish(daisyCl->queue);
 
   // Buffers to release;
   // massBuffer

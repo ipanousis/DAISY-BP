@@ -14,7 +14,7 @@ typedef struct ocl_daisy_programs_tag{
   cl_program program_f23;
   cl_program program_f29;
   cl_program program_fAny;
-  cl_program program_gAny;
+  cl_program program_trans;
   cl_kernel kernel_f7x;
   cl_kernel kernel_f7y;
   cl_kernel kernel_gX;
@@ -28,6 +28,7 @@ typedef struct ocl_daisy_programs_tag{
   cl_kernel kernel_f29y;
   cl_kernel kernel_fAny;
   cl_kernel kernel_gAny;
+  cl_kernel kernel_trans;
 } ocl_daisy_programs;
 #endif
 
@@ -37,7 +38,7 @@ typedef struct daisy_params_tag{
   unsigned char * array;
   int width;
   int height;
-  int orientationsNo;
+  int gradientsNo;
   int smoothingsNo;
   int paddedWidth;
   int paddedHeight;
