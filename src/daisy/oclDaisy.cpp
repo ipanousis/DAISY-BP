@@ -1,14 +1,19 @@
 #include "oclDaisy.h"
 #include <sys/time.h>
 
+// transposition offsets case where petal is left over and cannot be paired
+#define TR_PAIRS_SINGLE_ONLY -999
+#define TR_PAIRS_OFFSET_WIDTH 1000
+
 daisy_params * newDaisyParams(unsigned char* array, int height, int width,
-                              int gradientsNo, int smoothingsNo){
+                              int gradientsNo, int petalsNo, int smoothingsNo){
 
   daisy_params * params = (daisy_params*) malloc(sizeof(daisy_params));
   params->array = array;
   params->height = height;
   params->width = width;
   params->gradientsNo = gradientsNo;
+  params->petalsNo = petalsNo;
   params->smoothingsNo = smoothingsNo;
 
   return params;
@@ -510,7 +515,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   size_t convWorkerSize2d[2] = {daisy->paddedWidth, daisy->paddedHeight * daisy->gradientsNo};
   size_t convGroupSize2d[2]  = {16, 16};
 
-  gettimeofday(&startParaTime,NULL);
   clSetKernelArg(daisy->oclPrograms.kernel_f29y, 0, sizeof(massBuffer), (void*)&massBuffer);
   clSetKernelArg(daisy->oclPrograms.kernel_f29y, 1, sizeof(filterBuffer), (void*)&filterBuffer);
   clSetKernelArg(daisy->oclPrograms.kernel_f29y, 2, sizeof(float) * (convGroupSizeY + filter29Size-1) * (convGroupSizeX+1), 0);
@@ -528,7 +532,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   clFinish(daisyCl->queue);
 
-  gettimeofday(&endParaTime,NULL);
   error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
                       paddedWidth * paddedHeight * 8 * 2 * sizeof(float), 
                       paddedWidth * paddedHeight * sizeof(float), testArray,
@@ -564,6 +567,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
     return 1;
   }
 
+  gettimeofday(&startParaTime,NULL);
   int dstWidth  = daisy->paddedWidth * daisy->gradientsNo;
   int dstHeight = daisy->paddedHeight;
 
@@ -593,6 +597,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   clFinish(daisyCl->queue);
 
+  gettimeofday(&endParaTime,NULL);
   error = clEnqueueReadBuffer(daisyCl->queue, transBuffer, CL_TRUE,
                       0, paddedWidth * paddedHeight * 8 * sizeof(float), testArray,
                       0, NULL, NULL);
@@ -626,3 +631,145 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   return error;
 }
+
+// Generates the offsets to points in the circular petal region
+// of sigma * 2 in petalsNo directions
+float* generatePetalOffsets(float sigma, int petalsNo){
+
+  float regionRadius = sigma * 2;
+  float * petalOffsets = (float*)malloc(sizeof(float) * petalsNo * 2);
+
+  int i;
+  for(i = 0; i < petalsNo; i++){
+    petalOffsets[i*2]   = regionRadius * sin(i * (M_PI / 4));
+    petalOffsets[i*2+1] = regionRadius * cos(i * (M_PI / 4));
+  }
+
+  return petalOffsets;
+}
+
+// Generates pairs of neighbouring destination petal points given;
+// window dimensions of local data
+// offsets of a petal region
+// the number of those offsets (here 8)
+//
+// O offset = Y * WIDTH + WIDTH/2 + X
+// with; Y = [-maxOffsetY,windowHeight+maxOffsetY]  
+//       X = [-maxOffsetX,windowWidth+maxOffsetX]
+//       WIDTH = TR_PAIRS_OFFSET_WIDTH (special, artificially large, width to be 
+//                                      able to encode negative x values in the offset)
+//    decode X,Y again from O;
+//    Y = floor(O / WIDTH)
+//    X = O - Y * WIDTH - WIDTH/2
+//
+int* generateTranspositionOffsets(int windowHeight, int windowWidth,
+                                  float*  petalOffsets,
+                                  int     petalsNo,
+                                  int*    pairedOffsetsLength){
+
+  // all offsets will be 2d array of;
+  // (windowHeight+2 * maxY(petalregionoffsets)) X 
+  // (windowWidth +2 * maxX(petalRegionOffsets))
+
+  float maxOffsetY = 0;
+  float maxOffsetX = 0;
+  int i;
+  for(i = 0; i < petalsNo; i++){
+    maxOffsetY = (fabs(petalOffsets[i*2]   > maxOffsetY) ? fabs(petalOffsets[i*2])  :maxOffsetY);
+    maxOffsetX = (fabs(petalOffsets[i*2+1] > maxOffsetX) ? fabs(petalOffsets[i*2+1]):maxOffsetX);
+  }
+  maxOffsetY = ceil(fabs(maxOffsetY));
+  maxOffsetX = ceil(fabs(maxOffsetX));
+
+  int offsetsHeight = windowHeight + 2 * maxOffsetY;
+  int offsetsWidth  = windowWidth  + 2 * maxOffsetX;
+
+  int * allSources = (int*)malloc(sizeof(int) * offsetsHeight * offsetsWidth
+                                              * petalsNo * 2);
+
+  const int noSource = -999;
+
+  // generate em
+  int x,y,j;
+  j = 0;
+  for(y = -maxOffsetY; y < windowHeight+maxOffsetY; y++){
+    for(x = -maxOffsetX; x < windowWidth+maxOffsetX; x++){
+      int fromY,fromX;
+      for(i = 0; i < petalsNo; i++,j++){
+        fromY = round(y+petalOffsets[i*2]);
+        fromX = round(x+petalOffsets[i*2+1]);
+        if(fromY >= 0 && fromY < windowHeight && fromX >= 0 && fromX < windowWidth){
+          allSources[j*2] = fromY;
+          allSources[j*2+1] = fromX;
+        }
+        else{
+          allSources[j*2] = noSource;
+          allSources[j*2+1] = noSource;
+        }
+        if(y == 0 && x == 0)
+          printf("Offsets at %d,%d,%d: (%d,%d)\n",y,x,i,allSources[j*2],allSources[j*2+1]);
+      }
+    }
+  }
+
+  int pairIngredients = 4;
+  int * pairedOffsets = (int*)malloc(sizeof(int) * offsetsHeight * offsetsWidth
+                                                 * petalsNo * pairIngredients);
+
+  // pair em up
+  char * singlesLeftOver = (char*)malloc(sizeof(char) * offsetsHeight * offsetsWidth * petalsNo);
+  
+  const int isLeftOver = 1;
+
+  int currentPair = 0;
+  int thisSourceY,thisSourceX;
+  int nextSourceY,nextSourceX;
+  j = 0;
+  for(y = 0; y < offsetsHeight; y++){
+    for(i = 0; i < offsetsWidth*petalsNo-1; i++){
+      j = y*offsetsWidth*petalsNo+i;
+      thisSourceY = allSources[j*2];
+      thisSourceX = allSources[j*2+1];
+      nextSourceY = allSources[j*2+2];
+      nextSourceX = allSources[j*2+3];
+      if(thisSourceY != noSource && nextSourceY != noSource){
+        pairedOffsets[currentPair * pairIngredients]   = thisSourceY * windowWidth + thisSourceX; // p1
+        pairedOffsets[currentPair * pairIngredients+1] = nextSourceY * windowWidth + nextSourceX; // p2
+        pairedOffsets[currentPair * pairIngredients+2] = (y-maxOffsetY) * TR_PAIRS_OFFSET_WIDTH +\
+                                                         TR_PAIRS_OFFSET_WIDTH/2 + (x-maxOffsetX); // o, special 1D offset in image coordinates
+        pairedOffsets[currentPair * pairIngredients+3] = i % petalsNo; // petal
+        currentPair++;
+        i++;
+        singlesLeftOver[j] = !isLeftOver;
+        singlesLeftOver[j+1] = !isLeftOver;
+        printf("pa");
+      }
+      else if(thisSourceY != noSource && nextSourceY == noSource){
+        singlesLeftOver[j] = isLeftOver;
+      }
+    }
+    if(i == offsetsWidth*petalsNo-1) singlesLeftOver[y*offsetsWidth*petalsNo+i-1] = isLeftOver;
+  }
+  
+  for(j = 0; j < offsetsHeight*offsetsWidth*petalsNo; j++){
+
+    if(singlesLeftOver[j] == isLeftOver){
+      thisSourceY = allSources[j*2];
+      thisSourceX = allSources[j*2+1];
+      pairedOffsets[currentPair * pairIngredients] = thisSourceY * windowWidth + thisSourceX; // p1
+      pairedOffsets[currentPair * pairIngredients+1] = TR_PAIRS_SINGLE_ONLY;
+      pairedOffsets[currentPair * pairIngredients+2] = (y-maxOffsetY) * TR_PAIRS_OFFSET_WIDTH +\
+                                                       TR_PAIRS_OFFSET_WIDTH/2 + (x-maxOffsetX); // o, the special 1d offset
+      pairedOffsets[currentPair * pairIngredients+3] = j % petalsNo;
+      currentPair++;
+    }
+  }
+
+  free(allSources);
+  free(singlesLeftOver);
+
+  *pairedOffsetsLength = currentPair;
+
+  return pairedOffsets;
+}
+

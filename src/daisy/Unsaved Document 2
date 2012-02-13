@@ -1,0 +1,37 @@
+
+//dstArray[dstIndex] = lclArray[localY * (TRANS_GROUP_SIZE_X+1) + localX];
+    //dstArray[dstIndex] = lclArray[localY * (TRANS_GROUP_SIZE_X+1) + localX];
+
+
+
+    /*
+    float4 v, f;
+    float4 s = 0;
+
+    v = vload4(0, l_srcArray + l);
+    f = vload4(0, fltArray);
+    s += v * f;
+    v = vload4(1, l_srcArray + l);
+    f = vload4(1, fltArray);
+    s += v * f;
+    v = vload4(2, l_srcArray + l);
+    f = vload4(2, fltArray);
+    s += v * f;
+    v = vload4(3, l_srcArray + l);
+    f = vload4(3, fltArray);
+    s += v * f;
+    v = vload4(4, l_srcArray + l);
+    f = vload4(4, fltArray);
+    s += v * f;
+
+    v.xyz = vload3(0, l_srcArray + l + 20);
+    f.xyz = vload3(0, fltArray + 20);
+    s.xyz += v.xyz * f.xyz;
+
+    v.xyz = vload3(1, l_srcArray + l + 20);
+    f.xyz = vload3(1, fltArray + 20);
+    s.xyz += v.xyz * f.xyz;
+
+    v.xyz = vload3(2, l_srcArray + l + 20);
+    f.xyz = vload3(2, fltArray + 20);
+    s.xyz += v.xyz * f.xyz;*/

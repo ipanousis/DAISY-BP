@@ -1,0 +1,66 @@
+__kernel void convolve_7x(__global   float * massArray,
+                          __constant float * fltArray,
+                          const      int     pddWidth,
+                          const      int     pddHeight)
+{
+    const int r = get_global_id(0) / pddWidth;
+    const int c = get_global_id(0) % pddWidth;
+    __global float * srcArray = massArray + r * pddWidth + c;
+    __global float * dstArray = massArray + pddWidth * pddHeight + r * pddWidth + c;
+    const int localSize = get_local_size(0);
+    const int l = c % localSize;
+    __local float l_srcArray[64 + 6];
+    l_srcArray[l + 3] = srcArray[0]; // center value
+    if(l == 0){
+      l_srcArray[0] = (c > 0 ? srcArray[-3]:l_srcArray[3]);
+      l_srcArray[1] = (c > 0 ? srcArray[-2]:l_srcArray[3]);
+      l_srcArray[2] = (c > 0 ? srcArray[-1]:l_srcArray[3]);
+    }
+    else if(l == localSize-1){
+      l_srcArray[localSize+3] = (c < pddWidth-1 ? srcArray[1]:l_srcArray[l+3]);
+      l_srcArray[localSize+4] = (c < pddWidth-1 ? srcArray[2]:l_srcArray[l+3]);
+      l_srcArray[localSize+5] = (c < pddWidth-1 ? srcArray[3]:l_srcArray[l+3]);
+    }    
+    barrier(CLK_LOCAL_MEM_FENCE);
+    float4 v = vload4(0, l_srcArray + l);
+    float4 u = vload4(0, fltArray);
+    float4 w = v * u;
+    v = vload4(0, l_srcArray + l + 3);
+    u = vload4(0, fltArray+3);
+    w.x -= w.w;
+    w += v * u;
+    dstArray[0] = w.x + w.y + w.z + w.w;
+}
+__kernel void convolve_7y(__global   float * massArray,
+                          __constant float * fltArray,
+                          const      int     pddWidth,
+                          const      int     pddHeight)
+{
+    const int r = get_global_id(0) / pddHeight;
+    const int c = get_global_id(0) % pddHeight;
+    __global float * srcArray = massArray + pddWidth * pddHeight + c * pddWidth + r;
+    __global float * dstArray = massArray + pddWidth * pddHeight * 8 + c * pddWidth + r;
+    const int localSize = get_local_size(0);
+    const int l = c % localSize;
+    __local float l_srcArray[64 + 6];
+    l_srcArray[l + 3] = srcArray[0]; // center value
+    if(l == 0){
+      l_srcArray[0] = (c > 0 ? srcArray[-pddWidth*3]:l_srcArray[3]);
+      l_srcArray[1] = (c > 0 ? srcArray[-pddWidth*2]:l_srcArray[3]);
+      l_srcArray[2] = (c > 0 ? srcArray[-pddWidth]:l_srcArray[3]);
+    }
+    else if(l == localSize-1){
+      l_srcArray[localSize+3] = (c < pddHeight-1 ? srcArray[pddWidth]:l_srcArray[l+3]);
+      l_srcArray[localSize+4] = (c < pddHeight-1 ? srcArray[pddWidth*2]:l_srcArray[l+3]);
+      l_srcArray[localSize+5] = (c < pddHeight-1 ? srcArray[pddWidth*3]:l_srcArray[l+3]);
+    }
+    barrier(CLK_LOCAL_MEM_FENCE);
+    float4 v = vload4(0, l_srcArray + l);
+    float4 u = vload4(0, fltArray);
+    float4 w = v * u;
+    v = vload4(0, l_srcArray + l + 3);
+    u = vload4(0, fltArray+3);
+    w.x -= w.w;
+    w += v * u;
+    dstArray[0] = w.x + w.y + w.z + w.w;
+}

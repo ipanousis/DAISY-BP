@@ -1,0 +1,136 @@
+__kernel void convolve_29x(__global   float * massArray,
+                           __constant float * fltArray,
+                           const      int     pddWidth,
+                           const      int     pddHeight)
+{
+  const int r = get_global_id(0) / pddWidth;
+  const int c = get_global_id(0) % pddWidth;
+
+  __global float * srcArray = massArray + r * pddWidth + c + pddWidth * pddHeight * 8; // section B
+  __global float * dstArray = massArray + r * pddWidth + c + pddWidth * pddHeight * 8 * 3; // section D
+
+  const int localSize = get_local_size(0);
+  const int l = c % localSize;
+
+  __local float l_srcArray[64 + 28];
+
+  fltArray += (7+11+23);
+
+  for(int o = 0; o < 8; o++){
+
+    l_srcArray[l + 14] = srcArray[0]; // center value
+    if(l < 14){
+      l_srcArray[l] = (c > 13 ? srcArray[l-14]:l_srcArray[14]);
+    }
+    else if(l > localSize-15){
+      l_srcArray[l + 28] = (c < pddWidth-14 ? srcArray[l - localSize + 15]:l_srcArray[localSize+13]);
+    }
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    float4 v, f;
+    float4 s = 0;
+
+    v = vload4(0, l_srcArray + l);
+    f = vload4(0, fltArray);
+    s += v * f;
+    v = vload4(1, l_srcArray + l);
+    f = vload4(1, fltArray);
+    s += v * f;
+    v = vload4(2, l_srcArray + l);
+    f = vload4(2, fltArray);
+    s += v * f;
+    v = vload4(3, l_srcArray + l);
+    f = vload4(3, fltArray);
+    s += v * f;
+    v = vload4(4, l_srcArray + l);
+    f = vload4(4, fltArray);
+    s += v * f;
+
+    v.xyz = vload3(0, l_srcArray + l + 20);
+    f.xyz = vload3(0, fltArray + 20);
+    s.xyz += v.xyz * f.xyz;
+
+    v.xyz = vload3(1, l_srcArray + l + 20);
+    f.xyz = vload3(1, fltArray + 20);
+    s.xyz += v.xyz * f.xyz;
+
+    v.xyz = vload3(2, l_srcArray + l + 20);
+    f.xyz = vload3(2, fltArray + 20);
+    s.xyz += v.xyz * f.xyz;
+
+    dstArray[0] = s.x + s.y + s.z + s.w;
+
+    srcArray += pddWidth * pddHeight;
+    dstArray += pddWidth * pddHeight;
+
+  }
+}
+__kernel void convolve_29y(__global   float * massArray,
+                           __constant float * fltArray,
+                           const      int     pddWidth,
+                           const      int     pddHeight)
+{
+
+const int r = get_global_id(0) / pddHeight;
+const int c = get_global_id(0) % pddHeight;
+
+__global float * srcArray = massArray + c * pddWidth + r + pddWidth * pddHeight * 8 * 3; // section D
+__global float * dstArray = massArray + c * pddWidth + r + pddWidth * pddHeight * 8 * 2; // section C
+
+const int localSize = get_local_size(0);
+const int l = c % localSize;
+
+__local float l_srcArray[64 + 28];
+
+fltArray += (7+11+23);
+
+for(int o = 0; o < 8; o++){
+
+  l_srcArray[l + 14] = srcArray[0]; // center value
+  if(l < 14){
+    l_srcArray[l] = (c > 13 ? srcArray[(l-14)*pddWidth]:l_srcArray[14]);
+  }
+  else if(l > localSize-15){
+    l_srcArray[l + 28] = (c < pddWidth-14 ? srcArray[(l-localSize+15)*pddWidth]:l_srcArray[localSize+13]);
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  float4 v, f;
+  float4 s = 0;
+
+  v = vload4(0, l_srcArray + l);
+  f = vload4(0, fltArray);
+  s += v * f;
+  v = vload4(1, l_srcArray + l);
+  f = vload4(1, fltArray);
+  s += v * f;
+  v = vload4(2, l_srcArray + l);
+  f = vload4(2, fltArray);
+  s += v * f;
+  v = vload4(3, l_srcArray + l);
+  f = vload4(3, fltArray);
+  s += v * f;
+  v = vload4(4, l_srcArray + l);
+  f = vload4(4, fltArray);
+  s += v * f;
+
+  v.xyz = vload3(0, l_srcArray + l + 20);
+  f.xyz = vload3(0, fltArray + 20);
+  s.xyz += v.xyz * f.xyz;
+
+  v.xyz = vload3(1, l_srcArray + l + 20);
+  f.xyz = vload3(1, fltArray + 20);
+  s.xyz += v.xyz * f.xyz;
+
+  v.xyz = vload3(2, l_srcArray + l + 20);
+  f.xyz = vload3(2, fltArray + 20);
+  s.xyz += v.xyz * f.xyz;
+
+  dstArray[0] = s.x + s.y + s.z + s.w;
+
+  srcArray += pddWidth * pddHeight;
+  dstArray += pddWidth * pddHeight;
+}
+}

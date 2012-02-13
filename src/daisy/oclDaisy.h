@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 
 #include "ocl/cachedProgram.h"
 #include "ocl/cachedConstructs.h"
@@ -38,6 +39,7 @@ typedef struct daisy_params_tag{
   unsigned char * array;
   int width;
   int height;
+  int petalsNo;
   int gradientsNo;
   int smoothingsNo;
   int paddedWidth;
@@ -46,8 +48,12 @@ typedef struct daisy_params_tag{
 } daisy_params;
 #endif
 
-daisy_params * newDaisyParams(unsigned char*, int, int, int, int);
+daisy_params * newDaisyParams(unsigned char*, int, int, int, int, int);
 
 int initOcl(daisy_params *, ocl_constructs *);
 
 int oclDaisy(daisy_params *, ocl_constructs *);
+
+float * generatePetalOffsets(float, int);
+
+int * generateTranspositionOffsets(int, int, float*, int, int*);
