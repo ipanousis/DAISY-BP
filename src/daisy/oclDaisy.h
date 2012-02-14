@@ -56,4 +56,4 @@ int oclDaisy(daisy_params *, ocl_constructs *);
 
 float * generatePetalOffsets(float, int);
 
-int * generateTranspositionOffsets(int, int, float*, int, int*);
+int * generateTranspositionOffsets(int, int, float*, int, int*, int*);

@@ -662,10 +662,17 @@ float* generatePetalOffsets(float sigma, int petalsNo){
 //    Y = floor(O / WIDTH)
 //    X = O - Y * WIDTH - WIDTH/2
 //
+// recovery;
+//    k = floor(pairedOffsets[currentPair * pairIngredients+2] / (float)TR_PAIRS_OFFSET_WIDTH);
+//    l = pairedOffsets[currentPair * pairIngredients+2] - k * TR_PAIRS_OFFSET_WIDTH - TR_PAIRS_OFFSET_WIDTH/2;
+//
 int* generateTranspositionOffsets(int windowHeight, int windowWidth,
                                   float*  petalOffsets,
                                   int     petalsNo,
-                                  int*    pairedOffsetsLength){
+                                  int*    pairedOffsetsLength,
+                                  int*    numberOfActualPairs){
+
+  const int DEBUG = 0;
 
   // all offsets will be 2d array of;
   // (windowHeight+2 * maxY(petalregionoffsets)) X 
@@ -706,8 +713,10 @@ int* generateTranspositionOffsets(int windowHeight, int windowWidth,
           allSources[j*2] = noSource;
           allSources[j*2+1] = noSource;
         }
-        if(y == 0 && x == 0)
-          printf("Offsets at %d,%d,%d: (%d,%d)\n",y,x,i,allSources[j*2],allSources[j*2+1]);
+        if(DEBUG){
+          if(y == 0 && x == 0)
+            printf("Offsets at %d,%d,%d: (%d,%d)\n",y,x,i,allSources[j*2],allSources[j*2+1]);
+        }
       }
     }
   }
@@ -717,9 +726,13 @@ int* generateTranspositionOffsets(int windowHeight, int windowWidth,
                                                  * petalsNo * pairIngredients);
 
   // pair em up
-  char * singlesLeftOver = (char*)malloc(sizeof(char) * offsetsHeight * offsetsWidth * petalsNo);
-  
   const int isLeftOver = 1;
+
+  char * singlesLeftOver = (char*)malloc(sizeof(char) * offsetsHeight * offsetsWidth * petalsNo);
+
+  for(i = 0; i < offsetsHeight * offsetsWidth * petalsNo; i++)
+    singlesLeftOver[i] = !isLeftOver; // initialise value
+
 
   int currentPair = 0;
   int thisSourceY,thisSourceX;
@@ -728,32 +741,57 @@ int* generateTranspositionOffsets(int windowHeight, int windowWidth,
   for(y = 0; y < offsetsHeight; y++){
     for(i = 0; i < offsetsWidth*petalsNo-1; i++){
       j = y*offsetsWidth*petalsNo+i;
+      x = i / petalsNo;
+
+
       thisSourceY = allSources[j*2];
       thisSourceX = allSources[j*2+1];
       nextSourceY = allSources[j*2+2];
       nextSourceX = allSources[j*2+3];
+
+      if(i % petalsNo == 7){ // can't pair up last with first, the sets of values in the destination array are not continuous
+        if(thisSourceY != noSource)
+          singlesLeftOver[j] = isLeftOver;
+        continue;
+      }
+      if(DEBUG){
+        if(y == 15)
+          printf("(Y %d,X %d): (sourceY,sourceX),(nextY,nextX) = (%d,%d),(%d,%d)\n",y,x,thisSourceY,thisSourceX,nextSourceY,nextSourceX);
+      }
       if(thisSourceY != noSource && nextSourceY != noSource){
         pairedOffsets[currentPair * pairIngredients]   = thisSourceY * windowWidth + thisSourceX; // p1
         pairedOffsets[currentPair * pairIngredients+1] = nextSourceY * windowWidth + nextSourceX; // p2
         pairedOffsets[currentPair * pairIngredients+2] = (y-maxOffsetY) * TR_PAIRS_OFFSET_WIDTH +\
                                                          TR_PAIRS_OFFSET_WIDTH/2 + (x-maxOffsetX); // o, special 1D offset in image coordinates
         pairedOffsets[currentPair * pairIngredients+3] = i % petalsNo; // petal
+        if(DEBUG){
+          if(y == 15)
+            printf("Pair %d: (p1,p2,o,petal) = (%d,%d,%d,%d)\n",currentPair,pairedOffsets[currentPair * pairIngredients],
+                                                                            pairedOffsets[currentPair * pairIngredients+1],
+                                                                            pairedOffsets[currentPair * pairIngredients+2],
+                                                                            pairedOffsets[currentPair * pairIngredients+3]);
+        }
         currentPair++;
         i++;
-        singlesLeftOver[j] = !isLeftOver;
-        singlesLeftOver[j+1] = !isLeftOver;
-        printf("pa");
       }
       else if(thisSourceY != noSource && nextSourceY == noSource){
         singlesLeftOver[j] = isLeftOver;
       }
     }
-    if(i == offsetsWidth*petalsNo-1) singlesLeftOver[y*offsetsWidth*petalsNo+i-1] = isLeftOver;
+    if(i == offsetsWidth*petalsNo-1){ // ie if the last data was not paired up
+      j = y*offsetsWidth*petalsNo+i-1;
+      if(allSources[j*2] != noSource)
+        singlesLeftOver[j] = isLeftOver;
+    }
   }
   
+  *numberOfActualPairs = currentPair;
+
   for(j = 0; j < offsetsHeight*offsetsWidth*petalsNo; j++){
 
     if(singlesLeftOver[j] == isLeftOver){
+      y = j / (offsetsWidth * petalsNo);
+      x = (j % (offsetsWidth * petalsNo)) / petalsNo;
       thisSourceY = allSources[j*2];
       thisSourceX = allSources[j*2+1];
       pairedOffsets[currentPair * pairIngredients] = thisSourceY * windowWidth + thisSourceX; // p1
@@ -761,6 +799,19 @@ int* generateTranspositionOffsets(int windowHeight, int windowWidth,
       pairedOffsets[currentPair * pairIngredients+2] = (y-maxOffsetY) * TR_PAIRS_OFFSET_WIDTH +\
                                                        TR_PAIRS_OFFSET_WIDTH/2 + (x-maxOffsetX); // o, the special 1d offset
       pairedOffsets[currentPair * pairIngredients+3] = j % petalsNo;
+      if(DEBUG){
+        if(x == 15){
+          printf("Single %d (%.0f,%.0f): (p1,p2,o,petal) = (%d,%d,%d,%d)\n",currentPair,y-maxOffsetY,x-maxOffsetX,
+                                                                        pairedOffsets[currentPair * pairIngredients],
+                                                                        pairedOffsets[currentPair * pairIngredients+1],
+                                                                        pairedOffsets[currentPair * pairIngredients+2],
+                                                                        pairedOffsets[currentPair * pairIngredients+3]);
+          int k,l;
+          k = floor(pairedOffsets[currentPair * pairIngredients+2] / (float)TR_PAIRS_OFFSET_WIDTH);
+          l = pairedOffsets[currentPair * pairIngredients+2] - k * TR_PAIRS_OFFSET_WIDTH - TR_PAIRS_OFFSET_WIDTH/2;
+          printf("Recovered Y,X = %d,%d\n",k,l);
+        }
+      }
       currentPair++;
     }
   }
