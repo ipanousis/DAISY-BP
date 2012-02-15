@@ -45,32 +45,14 @@ int main( int argc, char **argv  )
 
   double start,end,diff;
 
-  //initOcl(daisy, daisyCl);
+  initOcl(daisy, daisyCl);
   //initOcl(daisy, daisyOcl);
 
-  //oclDaisy(daisy, daisyCl);
+  oclDaisy(daisy, daisyCl);
   //oclDaisy(daisy, daisyOcl);
 
-  float * petalOffsetsS1 = generatePetalOffsets(2.5,daisy->petalsNo);
-  float * petalOffsetsS2 = generatePetalOffsets(5,daisy->petalsNo);
-  float * petalOffsetsS3 = generatePetalOffsets(7.5,daisy->petalsNo);
-
-  int i;
-  for(i = 0; i < daisy->petalsNo; i++)
-    printf("p%d y,x - %f,%f\n",i,petalOffsetsS3[i*2],petalOffsetsS3[i*2+1]);
-/*int* generateTranspositionOffsets(int windowHeight, int windowWidth,
-                                  float*  petalOffsets,
-                                  int     petalsNo,
-                                  int*    pairedOffsetsLength)*/
-  int pairedOffsetsLength;
-  int actualPairs;
-  int * transpositionOffsets = generateTranspositionOffsets(16,16,petalOffsetsS3,daisy->petalsNo,&pairedOffsetsLength,&actualPairs);
-
-  //for(i = 0; i < 200; i++)
-  //  printf("Pair %d: (%d,%d,%d,%d)\n",i,transpositionOffsets[i*4],transpositionOffsets[i*4+1],transpositionOffsets[i*4+2],transpositionOffsets[i*4+3]);
-
-  printf("Paired Offsets: %d\n",pairedOffsetsLength);
-  printf("Actual Pairs: %d\n",actualPairs);
+  //printf("Paired Offsets: %d\n",pairedOffsetsLength);
+  //printf("Actual Pairs: %d\n",actualPairs);
   gettimeofday(&endTime,NULL);
 
   free(daisy->array);

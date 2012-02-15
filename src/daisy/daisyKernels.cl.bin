@@ -4220,171 +4220,250 @@ BB7_11:
 	ret;
 }
 
-.entry convolve_29y(
-	.param .u32 .ptr .global .align 4 convolve_29y_param_0,
-	.param .u32 .ptr .const .align 4 convolve_29y_param_1,
-	.param .u32 .ptr .shared .align 4 convolve_29y_param_2,
-	.param .u32 convolve_29y_param_3,
-	.param .u32 convolve_29y_param_4
+.entry transposeDaisy(
+	.param .u32 .ptr .global .align 4 transposeDaisy_param_0,
+	.param .u32 .ptr .global .align 4 transposeDaisy_param_1,
+	.param .u32 .ptr .const .align 4 transposeDaisy_param_2,
+	.param .u32 .ptr .shared .align 4 transposeDaisy_param_3,
+	.param .u32 transposeDaisy_param_4,
+	.param .u32 transposeDaisy_param_5,
+	.param .u32 transposeDaisy_param_6,
+	.param .u32 transposeDaisy_param_7,
+	.param .u32 transposeDaisy_param_8
 )
 {
-	.reg .f32 	%f<17>;
-	.reg .pred 	%p<6>;
-	.reg .s32 	%r<74>;
+	.reg .f32 	%f<6>;
+	.reg .pred 	%p<7>;
+	.reg .s32 	%r<159>;
 
 
-	ld.param.u32 	%r1, [convolve_29y_param_0];
-	ld.param.u32 	%r3, [convolve_29y_param_2];
-	ld.param.u32 	%r4, [convolve_29y_param_3];
-	ld.param.u32 	%r5, [convolve_29y_param_4];
+	ld.param.u32 	%r5, [transposeDaisy_param_4];
 	// inline asm
-	mov.u32 	%r20, %envreg4;
+	mov.u32 	%r46, %envreg4;
 	// inline asm
 	// inline asm
-	mov.u32 	%r21, %ntid.y;
+	mov.u32 	%r47, %ntid.y;
 	// inline asm
 	// inline asm
-	mov.u32 	%r22, %ctaid.y;
+	mov.u32 	%r48, %ctaid.y;
 	// inline asm
 	// inline asm
-	mov.u32 	%r23, %tid.y;
+	mov.u32 	%r49, %tid.y;
 	// inline asm
-	add.s32 	%r30, %r23, %r20;
-	mad.lo.s32 	%r6, %r22, %r21, %r30;
+	add.s32 	%r54, %r49, %r46;
+	mad.lo.s32 	%r10, %r48, %r47, %r54;
 	// inline asm
-	mov.u32 	%r24, %envreg3;
-	// inline asm
-	// inline asm
-	mov.u32 	%r25, %ntid.x;
+	mov.u32 	%r50, %tid.x;
 	// inline asm
 	// inline asm
-	mov.u32 	%r26, %ctaid.x;
+	mov.u32 	%r51, %tid.y;
 	// inline asm
 	// inline asm
-	mov.u32 	%r27, %tid.x;
-	// inline asm
-	add.s32 	%r31, %r27, %r24;
-	mad.lo.s32 	%r32, %r26, %r25, %r31;
-	rem.u32 	%r33, %r32, %r4;
-	mad.lo.s32 	%r34, %r5, 24, %r6;
-	mad.lo.s32 	%r7, %r34, %r4, %r33;
-	// inline asm
-	mov.u32 	%r28, %tid.x;
+	mov.u32 	%r52, %envreg6;
 	// inline asm
 	// inline asm
-	mov.u32 	%r29, %tid.y;
+	mov.u32 	%r53, %ntid.x;
 	// inline asm
-	shl.b32 	%r35, %r7, 2;
-	add.s32 	%r36, %r1, %r35;
-	add.s32 	%r37, %r28, 238;
-	mad.lo.s32 	%r38, %r29, 17, %r37;
-	shl.b32 	%r39, %r38, 2;
-	add.s32 	%r40, %r3, %r39;
-	add.s32 	%r10, %r40, -952;
-	ld.global.f32 	%f9, [%r36];
-	st.shared.f32 	[%r40], %f9;
-	shl.b32 	%r41, %r37, 2;
-	add.s32 	%r42, %r3, %r41;
-	add.s32 	%r11, %r42, -952;
-	setp.gt.s32 	%p1, %r29, 13;
-	mov.u32 	%r73, %r29;
-	@%p1 bra 	BB8_5;
+	mul.lo.s32 	%r55, %r53, %r52;
+	shl.b32 	%r15, %r5, 3;
+	div.u32 	%r16, %r15, %r55;
+	setp.lt.s32 	%p1, %r16, 1;
+	@%p1 bra 	BB8_3;
 
-	ld.param.u32 	%r70, [convolve_29y_param_4];
-	rem.s32 	%r43, %r6, %r70;
-	setp.gt.s32 	%p2, %r43, 13;
-	@%p2 bra 	BB8_3;
+	ld.param.u32 	%r150, [transposeDaisy_param_6];
+	add.s32 	%r57, %r50, %r150;
+	mad.lo.s32 	%r17, %r15, %r10, %r57;
+	ld.param.u32 	%r155, [transposeDaisy_param_8];
+	add.s32 	%r58, %r155, 128;
+	mad.lo.s32 	%r18, %r51, %r58, %r50;
+	ld.param.u32 	%r148, [transposeDaisy_param_4];
+	shl.b32 	%r60, %r148, 3;
+	div.u32 	%r19, %r60, %r55;
+	mov.u32 	%r156, 0;
 
-	ld.shared.f32 	%f14, [%r11+952];
-	bra.uni 	BB8_4;
+BB8_2:
+	// inline asm
+	mov.u32 	%r61, %envreg0;
+	// inline asm
+	// inline asm
+	mov.u32 	%r62, %ctaid.x;
+	// inline asm
+	add.s32 	%r65, %r62, %r61;
+	// inline asm
+	mov.u32 	%r63, %ntid.x;
+	// inline asm
+	mad.lo.s32 	%r66, %r19, %r65, %r156;
+	mad.lo.s32 	%r67, %r66, %r63, %r17;
+	shl.b32 	%r68, %r67, 2;
+	ld.param.u32 	%r142, [transposeDaisy_param_0];
+	add.s32 	%r69, %r142, %r68;
+	ld.global.f32 	%f1, [%r69];
+	// inline asm
+	mov.u32 	%r64, %ntid.x;
+	// inline asm
+	mad.lo.s32 	%r70, %r64, %r156, %r18;
+	shl.b32 	%r71, %r70, 2;
+	ld.param.u32 	%r146, [transposeDaisy_param_3];
+	add.s32 	%r72, %r146, %r71;
+	st.shared.f32 	[%r72], %f1;
+	add.s32 	%r156, %r156, 1;
+	setp.lt.s32 	%p2, %r156, %r16;
+	@%p2 bra 	BB8_2;
 
 BB8_3:
-	ld.param.u32 	%r67, [convolve_29y_param_3];
-	mul.lo.s32 	%r44, %r67, 14;
-	sub.s32 	%r45, %r7, %r44;
-	shl.b32 	%r46, %r45, 2;
-	ld.param.u32 	%r62, [convolve_29y_param_0];
-	add.s32 	%r47, %r62, %r46;
-	ld.global.f32 	%f14, [%r47];
+	bar.sync 	0;
+	// inline asm
+	mov.u32 	%r73, %ntid.x;
+	// inline asm
+	// inline asm
+	mov.u32 	%r74, %ntid.y;
+	// inline asm
+	mul.lo.s32 	%r86, %r74, %r73;
+	shr.u32 	%r87, %r86, 4;
+	ld.param.u32 	%r153, [transposeDaisy_param_7];
+	div.u32 	%r88, %r153, %r87;
+	// inline asm
+	mov.u32 	%r75, %ntid.y;
+	// inline asm
+	// inline asm
+	mov.u32 	%r76, %ntid.x;
+	// inline asm
+	mul.lo.s32 	%r89, %r76, %r75;
+	shr.u32 	%r90, %r89, 4;
+	// inline asm
+	mov.u32 	%r77, %tid.y;
+	// inline asm
+	// inline asm
+	mov.u32 	%r78, %ntid.x;
+	// inline asm
+	// inline asm
+	mov.u32 	%r79, %tid.x;
+	// inline asm
+	mad.lo.s32 	%r91, %r78, %r77, %r79;
+	shr.u32 	%r92, %r91, 4;
+	// inline asm
+	mov.u32 	%r80, %envreg1;
+	// inline asm
+	// inline asm
+	mov.u32 	%r81, %ctaid.y;
+	// inline asm
+	add.s32 	%r93, %r81, %r80;
+	// inline asm
+	mov.u32 	%r82, %ntid.y;
+	// inline asm
+	// inline asm
+	mov.u32 	%r83, %envreg0;
+	// inline asm
+	// inline asm
+	mov.u32 	%r84, %ctaid.x;
+	// inline asm
+	add.s32 	%r94, %r84, %r83;
+	// inline asm
+	mov.u32 	%r85, %ntid.x;
+	// inline asm
+	mul.lo.s32 	%r27, %r94, %r85;
+	mul.lo.s32 	%r28, %r82, %r93;
+	ld.param.u32 	%r151, [transposeDaisy_param_6];
+	div.s32 	%r95, %r151, %r15;
+	ld.param.u32 	%r149, [transposeDaisy_param_5];
+	div.s32 	%r29, %r95, %r149;
+	mul.lo.s32 	%r158, %r92, %r88;
+	add.s32 	%r96, %r90, -1;
+	setp.eq.s32 	%p3, %r92, %r96;
+	add.s32 	%r97, %r92, 1;
+	mul.lo.s32 	%r98, %r97, %r88;
+	selp.b32 	%r31, %r153, %r98, %p3;
+	setp.ge.s32 	%p4, %r158, %r31;
+	@%p4 bra 	BB8_6;
 
-BB8_4:
-	st.shared.f32 	[%r10], %f14;
+	setp.gt.s32 	%p5, %r50, 7;
+	selp.b32 	%r32, -1, 0, %p5;
+	ld.param.u32 	%r154, [transposeDaisy_param_8];
+	add.s32 	%r33, %r154, 128;
+	shr.s32 	%r99, %r50, 31;
+	shr.u32 	%r100, %r99, 29;
+	add.s32 	%r101, %r50, %r100;
+	and.b32  	%r102, %r101, -8;
+	sub.s32 	%r34, %r50, %r102;
+	add.s32 	%r35, %r27, 536870412;
+	shl.b32 	%r103, %r29, 3;
+	or.b32  	%r36, %r103, 1;
+	ld.param.u32 	%r152, [transposeDaisy_param_7];
+	div.u32 	%r106, %r152, %r87;
+	mul.lo.s32 	%r109, %r106, %r92;
+	shl.b32 	%r110, %r109, 4;
+	or.b32  	%r111, %r110, 8;
+	ld.param.u32 	%r144, [transposeDaisy_param_2];
+	add.s32 	%r157, %r111, %r144;
 
 BB8_5:
-	setp.lt.s32 	%p3, %r29, 2;
-	@%p3 bra 	BB8_10;
+	ld.const.u32 	%r112, [%r157+-8];
+	ld.const.u32 	%r113, [%r157+-4];
+	ld.const.u32 	%r114, [%r157+4];
+	ld.const.u32 	%r115, [%r157];
+	cvt.rn.f32.s32 	%f4, %r115;
+	div.full.f32 	%f3, %f4, 0f447A0000;
+	// inline asm
+	cvt.rmi.f32.f32 	%f2, %f3;
+	// inline asm
+	cvt.rzi.s32.f32 	%r116, %f2;
+	mul.lo.s32 	%r117, %r116, 1000;
+	sub.s32 	%r118, %r113, %r112;
+	and.b32  	%r119, %r118, %r32;
+	add.s32 	%r120, %r119, %r112;
+	shr.s32 	%r121, %r120, 31;
+	shr.u32 	%r122, %r121, 28;
+	add.s32 	%r123, %r120, %r122;
+	shr.s32 	%r124, %r123, 4;
+	and.b32  	%r125, %r123, 134217712;
+	sub.s32 	%r126, %r120, %r125;
+	shl.b32 	%r127, %r126, 3;
+	mad.lo.s32 	%r128, %r124, %r33, %r34;
+	add.s32 	%r129, %r128, %r127;
+	shl.b32 	%r130, %r129, 2;
+	ld.param.u32 	%r145, [transposeDaisy_param_3];
+	add.s32 	%r131, %r145, %r130;
+	add.s32 	%r132, %r116, %r28;
+	add.s32 	%r133, %r35, %r115;
+	sub.s32 	%r134, %r133, %r117;
+	ld.param.u32 	%r147, [transposeDaisy_param_4];
+	mad.lo.s32 	%r135, %r132, %r147, %r134;
+	add.s32 	%r136, %r36, %r114;
+	shl.b32 	%r137, %r136, 3;
+	add.s32 	%r138, %r137, %r50;
+	mad.lo.s32 	%r139, %r135, 200, %r138;
+	shl.b32 	%r140, %r139, 2;
+	ld.param.u32 	%r143, [transposeDaisy_param_1];
+	add.s32 	%r141, %r143, %r140;
+	ld.shared.f32 	%f5, [%r131];
+	st.global.f32 	[%r141], %f5;
+	add.s32 	%r157, %r157, 16;
+	add.s32 	%r158, %r158, 1;
+	setp.lt.s32 	%p6, %r158, %r31;
+	@%p6 bra 	BB8_5;
 
-	ld.param.u32 	%r69, [convolve_29y_param_4];
-	rem.s32 	%r48, %r6, %r69;
-	add.s32 	%r49, %r69, -14;
-	setp.lt.s32 	%p4, %r48, %r49;
-	@%p4 bra 	BB8_8;
-
-	ld.shared.f32 	%f15, [%r11+1972];
-	bra.uni 	BB8_9;
-
-BB8_8:
-	ld.param.u32 	%r66, [convolve_29y_param_3];
-	mad.lo.s32 	%r50, %r66, 14, %r7;
-	shl.b32 	%r51, %r50, 2;
-	ld.param.u32 	%r61, [convolve_29y_param_0];
-	add.s32 	%r52, %r61, %r51;
-	ld.global.f32 	%f15, [%r52];
-
-BB8_9:
-	st.shared.f32 	[%r10+1904], %f15;
-
-BB8_10:
-	bar.sync 	0;
-	add.s32 	%r12, %r29, 29;
-	mad.lo.s32 	%r53, %r29, 17, %r28;
-	shl.b32 	%r54, %r53, 2;
-	ld.param.u32 	%r64, [convolve_29y_param_2];
-	add.s32 	%r72, %r64, %r54;
-	mov.f32 	%f16, 0f00000000;
-	ld.param.u32 	%r71, [convolve_29y_param_1];
-
-BB8_11:
-	ld.const.f32 	%f11, [%r71+164];
-	ld.shared.f32 	%f12, [%r72];
-	mul.f32 	%f13, %f12, %f11;
-	add.f32 	%f16, %f16, %f13;
-	add.s32 	%r72, %r72, 68;
-	add.s32 	%r71, %r71, 4;
-	add.s32 	%r73, %r73, 1;
-	setp.lt.s32 	%p5, %r73, %r12;
-	@%p5 bra 	BB8_11;
-
-	ld.param.u32 	%r65, [convolve_29y_param_3];
-	ld.param.u32 	%r68, [convolve_29y_param_4];
-	mul.lo.s32 	%r55, %r65, %r68;
-	shl.b32 	%r56, %r55, 3;
-	sub.s32 	%r57, %r7, %r56;
-	shl.b32 	%r58, %r57, 2;
-	ld.param.u32 	%r60, [convolve_29y_param_0];
-	add.s32 	%r59, %r60, %r58;
-	st.global.f32 	[%r59], %f16;
+BB8_6:
 	ret;
 }
 
-.entry transpose(
-	.param .u32 .ptr .global .align 4 transpose_param_0,
-	.param .u32 .ptr .global .align 4 transpose_param_1,
-	.param .u32 .ptr .shared .align 4 transpose_param_2,
-	.param .u32 transpose_param_3,
-	.param .u32 transpose_param_4,
-	.param .u32 transpose_param_5,
-	.param .u32 transpose_param_6
+.entry transposeGradients(
+	.param .u32 .ptr .global .align 4 transposeGradients_param_0,
+	.param .u32 .ptr .global .align 4 transposeGradients_param_1,
+	.param .u32 .ptr .shared .align 4 transposeGradients_param_2,
+	.param .u32 transposeGradients_param_3,
+	.param .u32 transposeGradients_param_4,
+	.param .u32 transposeGradients_param_5,
+	.param .u32 transposeGradients_param_6
 )
 {
 	.reg .f32 	%f<3>;
 	.reg .s32 	%r<63>;
 
 
-	ld.param.u32 	%r18, [transpose_param_0];
-	ld.param.u32 	%r2, [transpose_param_2];
-	ld.param.u32 	%r19, [transpose_param_3];
-	ld.param.u32 	%r20, [transpose_param_4];
+	ld.param.u32 	%r18, [transposeGradients_param_0];
+	ld.param.u32 	%r2, [transposeGradients_param_2];
+	ld.param.u32 	%r19, [transposeGradients_param_3];
+	ld.param.u32 	%r20, [transposeGradients_param_4];
 	// inline asm
 	mov.u32 	%r7, %envreg3;
 	// inline asm
@@ -4453,7 +4532,7 @@ BB8_11:
 	// inline asm
 	shl.b32 	%r45, %r40, 2;
 	add.s32 	%r46, %r45, %r44;
-	ld.param.u32 	%r62, [transpose_param_6];
+	ld.param.u32 	%r62, [transposeGradients_param_6];
 	mad.lo.s32 	%r47, %r5, %r62, %r6;
 	// inline asm
 	mov.u32 	%r41, %envreg0;
@@ -4464,16 +4543,16 @@ BB8_11:
 	add.s32 	%r48, %r42, %r41;
 	shl.b32 	%r49, %r48, 8;
 	shl.b32 	%r50, %r46, 3;
-	ld.param.u32 	%r61, [transpose_param_5];
+	ld.param.u32 	%r61, [transposeGradients_param_5];
 	mad.lo.s32 	%r51, %r47, %r61, %r43;
 	add.s32 	%r52, %r51, %r50;
 	add.s32 	%r53, %r52, %r49;
 	mad.lo.s32 	%r54, %r43, 33, %r46;
 	shl.b32 	%r55, %r54, 2;
-	ld.param.u32 	%r60, [transpose_param_2];
+	ld.param.u32 	%r60, [transposeGradients_param_2];
 	add.s32 	%r56, %r60, %r55;
 	shl.b32 	%r57, %r53, 2;
-	ld.param.u32 	%r59, [transpose_param_1];
+	ld.param.u32 	%r59, [transposeGradients_param_1];
 	add.s32 	%r58, %r59, %r57;
 	ld.shared.f32 	%f2, [%r56];
 	st.global.f32 	[%r58], %f2;

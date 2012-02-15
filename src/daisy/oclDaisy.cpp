@@ -15,6 +15,7 @@ daisy_params * newDaisyParams(unsigned char* array, int height, int width,
   params->gradientsNo = gradientsNo;
   params->petalsNo = petalsNo;
   params->smoothingsNo = smoothingsNo;
+  params->totalPetalsNo = petalsNo * smoothingsNo + 1;
 
   return params;
 }
@@ -96,14 +97,21 @@ int initOcl(daisy_params * daisy, ocl_constructs * daisyCl){
   }
   
   daisy->oclPrograms.kernel_f29x = clCreateKernel(daisyCl->program, "convolve_29x", &error);
-  daisy->oclPrograms.kernel_f29y = clCreateKernel(daisyCl->program, "convolve_29y", &error);
+  //daisy->oclPrograms.kernel_f29y = clCreateKernel(daisyCl->program, "convolve_29y", &error);
 
   if(error){
     fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
     return 1;
   }
 
-  daisy->oclPrograms.kernel_trans = clCreateKernel(daisyCl->program, "transpose", &error);
+  daisy->oclPrograms.kernel_trans = clCreateKernel(daisyCl->program, "transposeGradients", &error);
+
+  if(error){
+    fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
+    return 1;
+  }
+
+  daisy->oclPrograms.kernel_transd = clCreateKernel(daisyCl->program, "transposeDaisy", &error);
 
   if(error){
     fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
@@ -511,7 +519,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   }
   
   // convolve Y - massBuffer sections: D to C
-  
+  /*
   size_t convWorkerSize2d[2] = {daisy->paddedWidth, daisy->paddedHeight * daisy->gradientsNo};
   size_t convGroupSize2d[2]  = {16, 16};
 
@@ -551,9 +559,9 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   for(k = 1; k < 35; k++)
     printf(", %f", testArray[(daisy->height-35+k)*paddedWidth]);
   printf("\n");
+  */
 
   printf("Convolution to 7.5 sent!\n");
-
 
   // transpose
 
@@ -567,7 +575,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
     return 1;
   }
 
-  gettimeofday(&startParaTime,NULL);
   int dstWidth  = daisy->paddedWidth * daisy->gradientsNo;
   int dstHeight = daisy->paddedHeight;
 
@@ -597,7 +604,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   clFinish(daisyCl->queue);
 
-  gettimeofday(&endParaTime,NULL);
+  // Verify transposition a)
   error = clEnqueueReadBuffer(daisyCl->queue, transBuffer, CL_TRUE,
                       0, paddedWidth * paddedHeight * 8 * sizeof(float), testArray,
                       0, NULL, NULL);
@@ -613,12 +620,115 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
     printf("\n\n");
   }
 
+  // b) final transposition
+  int windowHeight = 16;
+  int windowWidth  = 16;
+  int lclArrayPaddingS3 = 8;
+
+  transWorkerSize[0] = daisy->paddedWidth;
+  transWorkerSize[1] = daisy->paddedHeight;
+  transGroupSize[0] = windowWidth;
+  transGroupSize[1] = windowHeight;
+
+  gettimeofday(&startParaTime,NULL);
+  // generate+deliver the transposition offset array
+  float sigma3 = 7.5;
+  float * petalOffsetsS3 = generatePetalOffsets(sigma3, daisy->petalsNo);
+
+  int transOffsetsS3Length, actualPairsS3;
+  int * transOffsetsS3 = generateTranspositionOffsets(windowHeight, windowWidth,
+                                                      petalOffsetsS3, daisy->petalsNo,
+                                                      &transOffsetsS3Length, &actualPairsS3);
+
+  printf("Paired Offsets: %d\n", transOffsetsS3Length);
+  printf("Actual Pairs: %d\n", actualPairsS3);
+
+  // Release mass buffer and reallocate final daisy buffer
+  clReleaseMemObject(massBuffer);
+
+  unsigned long int daisyBufferSize = (daisy->paddedHeight * daisy->paddedWidth) * daisy->totalPetalsNo * daisy->gradientsNo * sizeof(float);
+
+  printf("Allocated %d bytes on GPU for final daisy buffer (%dMB)\n",daisyBufferSize,daisyBufferSize/(1024*1024));
+
+  cl_mem daisyBuffer = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY,
+                                      daisyBufferSize,(void*)NULL, &error);
+
+  if(error){
+    fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateBuffer daisy failed: %d\n",error);
+    return 1;
+  }
+
+  cl_mem transOffsetBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+                                            transOffsetsS3Length * 4 * sizeof(int), (void*)transOffsetsS3, &error);
+
+  if(error){
+    fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateBuffer trans offsets failed: %d\n",error);
+    return 1;
+  }
+
+
+  int srcGlobalOffset = daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo * 2;
+
+  clSetKernelArg(daisy->oclPrograms.kernel_transd, 0, sizeof(transBuffer), (void*)&transBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_transd, 1, sizeof(daisyBuffer), (void*)&daisyBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_transd, 2, sizeof(transOffsetBuffer), (void*)&transOffsetBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_transd, 3, sizeof(float) * (windowHeight * (windowWidth * daisy->gradientsNo + lclArrayPaddingS3)), 0);
+  clSetKernelArg(daisy->oclPrograms.kernel_transd, 4, sizeof(int), (void*)&(daisy->paddedWidth));
+  clSetKernelArg(daisy->oclPrograms.kernel_transd, 5, sizeof(int), (void*)&(daisy->paddedHeight));
+  clSetKernelArg(daisy->oclPrograms.kernel_transd, 6, sizeof(int), (void*)&(srcGlobalOffset));
+  clSetKernelArg(daisy->oclPrograms.kernel_transd, 7, sizeof(int), (void*)&(transOffsetsS3Length));
+  clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&(lclArrayPaddingS3));
+
+  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_transd, 
+                                 2, NULL, 
+                                 transWorkerSize, transGroupSize, 
+                                 0, NULL, NULL);
+  
+  if(error){
+    fprintf(stderr, "oclDaisy.cpp::oclDaisy clEnqueueNDRangeKernel failed: %d\n",error);
+    return 1;
+  }
+
+
+  /*__kernel void transposeDaisy(__global   float * srcArray,
+                             __global   float * dstArray,
+                             __constant int   * transArray,
+                             __local    float * lclArray,
+                             const      int     srcWidth,
+                             const      int     srcHeight,
+                             const      int     srcGlobalOffset,
+                             const      int     transArrayLength,
+                             const      int     lclArrayPadding)*/
+  
+                      
+
+  clFinish(daisyCl->queue);
+
+  // Verify transposition b)
+  error = clEnqueueReadBuffer(daisyCl->queue, daisyBuffer, CL_TRUE,
+                      0, paddedWidth * paddedHeight * 8 * sizeof(float), testArray,
+                      0, NULL, NULL);
+
+  clFinish(daisyCl->queue);
+
+  dstWidth = paddedWidth * daisy->gradientsNo * daisy->totalPetalsNo;
+  printf("\nDaisy Transpose:\n");
+  for(r = 0; r < 10; r++){
+    printf("Row %d: %f",r,testArray[r * dstWidth]);
+    for(k = 1; k < 25; k++)
+      printf(", %f", testArray[r * dstWidth + k]);
+    printf("\n\n");
+  }
+
+  gettimeofday(&endParaTime,NULL);
+
   // Buffers to release;
   // massBuffer
   // filterBuffer
-  clReleaseMemObject(massBuffer);
+  clReleaseMemObject(daisyBuffer);
   clReleaseMemObject(transBuffer);
   clReleaseMemObject(filterBuffer);
+  clReleaseMemObject(transOffsetBuffer);
 
   startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
   endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);

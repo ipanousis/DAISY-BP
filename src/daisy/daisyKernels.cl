@@ -340,59 +340,87 @@ __kernel void convolve_29x(__global   float * massArray,
   massArray[dstOffset] = s;
 }
 
-#define CONV29Y_GROUP_SIZE_X 16
-#define CONV29Y_GROUP_SIZE_Y 16
+#define GRADIENT_NUM 8
+#define TOTAL_PETALS_NO 25
+#define REGION_PETALS_NO 8
 
-__kernel void convolve_29y(__global   float * massArray,
-                           __constant float * fltArray,
-                           __local    float * lclArray,
-                           const      int     pddWidth,
-                           const      int     pddHeight)
+#define TRANSD_PAIRS_OFFSET_WIDTH 1000
+#define TRANSD_PAIRS_SINGLE_ONLY -999
+
+__kernel void transposeDaisy(__global   float * srcArray,
+                             __global   float * dstArray,
+                             __constant int   * transArray,
+                             __local    float * lclArray,    //lclArray[16][16 * 8 + PADDING]
+                             const      int     srcWidth,
+                             const      int     srcHeight,
+                             const      int     srcGlobalOffset,
+                             const      int     transArrayLength,
+                             const      int     lclArrayPadding) // either 0 or 8
 {
+  const int xid = get_global_id(0);
+  const int yid = get_global_id(1);
+  
+  const int lx = get_local_id(0);
+  const int ly = get_local_id(1);
 
-    const int r = get_global_id(1);
-    const int c = get_global_id(0) % pddWidth;
+  // coalesced read (srcGlobalOffset + xid,yid) + padded write to lclArray
+  const int stepsPerWorker = (srcWidth * GRADIENT_NUM) / get_global_size(0); // with 16x16 will be 8
+  for(int i = 0; i < stepsPerWorker; i++){
+    lclArray[ly * (16 * GRADIENT_NUM + lclArrayPadding)                     // local Y
+              + get_local_size(0) * i + lx] =                               // local X
+        srcArray[srcGlobalOffset + yid * srcWidth * GRADIENT_NUM +          // global offset + global Y
+          (get_group_id(0) * stepsPerWorker + i) * get_local_size(0) + lx]; // global X
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
 
-    const int srcOffset = r * pddWidth + c + pddWidth * pddHeight * 8 * 3; // section D
+  // non-bank-conflicting (at least attempted) read with transArray as well as
+  // coalesced write
+  const int pairsPerHalfWarp = transArrayLength / ((get_local_size(0) * get_local_size(1)) / 16);
+  const int halfWarps = (get_local_size(1) * get_local_size(0)) / 16;
+  const int halfWarpId = (get_local_id(1) * get_local_size(0) + get_local_id(0)) / 16;
 
-    const int lx = get_local_id(0);
-    const int ly = get_local_id(1);
+  const int topLeftY = get_group_id(1) * get_local_size(1);
+  const int topLeftX = get_group_id(0) * get_local_size(0);
+  const int dstGroupOffset = (topLeftY * srcWidth + topLeftX) * GRADIENT_NUM * TOTAL_PETALS_NO;
 
-    fltArray += (7+11+23);
+  const int petalRegion = (srcGlobalOffset / (srcWidth * GRADIENT_NUM)) / srcHeight;
 
-    // Load main data first
-    lclArray[(ly+14) * (CONV29Y_GROUP_SIZE_X+1) + lx] = massArray[srcOffset];
+  for(int p = pairsPerHalfWarp * halfWarpId; p < (halfWarpId == halfWarps-1 ? transArrayLength : pairsPerHalfWarp * (halfWarpId+1)); p++){
+    const int fromP1   = transArray[p * 4];
+    const int fromP2   = transArray[p * 4 + 1];
+    const int toOffset = transArray[p * 4 + 2];
+    const int petalNo  = transArray[p * 4 + 3];
+    
+    const int toOffsetY = floor(toOffset / (float) TRANSD_PAIRS_OFFSET_WIDTH);
+    const int toOffsetX = toOffset - toOffsetY * TRANSD_PAIRS_OFFSET_WIDTH - TRANSD_PAIRS_OFFSET_WIDTH/2;
 
-    // Load local upper halo second
-    if(ly < 14){
-      lclArray[ly * (CONV29Y_GROUP_SIZE_X+1) + lx] = ((r % pddHeight) > 13 ? massArray[srcOffset-14*pddWidth]:lclArray[14 * (CONV29Y_GROUP_SIZE_X+1) + lx]);
-    }
+    const int intraHalfWarpOffset = (lx >= 8) * (fromP2-fromP1);
 
-    // Load local lower halo third
-    if(ly > CONV29Y_GROUP_SIZE_Y-15){
-      lclArray[(ly+28) * (CONV29Y_GROUP_SIZE_X+1) + lx] = ((r % pddHeight) < pddHeight-14 ? massArray[srcOffset+14*pddWidth]:lclArray[(14+CONV29Y_GROUP_SIZE_Y-1) * (CONV29Y_GROUP_SIZE_X+1) + lx]);
-    }
+    // allow only workers 0-7 to write if this is a single
+    //if(fromP2 != TRANSD_PAIRS_SINGLE_ONLY || (lx < 8)){
 
-    barrier(CLK_LOCAL_MEM_FENCE);
+      dstArray[dstGroupOffset 
+               + (toOffsetY * srcWidth + toOffsetX) * GRADIENT_NUM * TOTAL_PETALS_NO
+               + (petalRegion * REGION_PETALS_NO + 1 + petalNo) * GRADIENT_NUM + lx] = 
 
-    float s = 0;
-    for(int i = ly; i < ly+29; i++)
-      s += lclArray[i * (CONV29Y_GROUP_SIZE_X+1) + lx] * fltArray[i-ly];
-
-    const int dstOffset = srcOffset - pddWidth * pddHeight * 8; // section C
-    massArray[dstOffset] = s;
+        lclArray[((fromP1+intraHalfWarpOffset) / 16) * (16 * GRADIENT_NUM + lclArrayPadding) + ((fromP1+intraHalfWarpOffset) % 16) * GRADIENT_NUM + lx % 8];
+    //}
+  }
+  // todo;
+  // (lclArray read)
+  // skip pairs/singles outside of the boundaries
+  // make independent of localSizeY,localSizeX,stepsPerWorker - after got it working
 }
 
 #define TRANS_GROUP_SIZE_X 32
 #define TRANS_GROUP_SIZE_Y 8
-#define GRADIENT_NUM 8
-__kernel void transpose(__global float * srcArray,
-                        __global float * dstArray,
-                        __local  float * lclArray,
-                        const    int     srcWidth,
-                        const    int     srcHeight,
-                        const    int     dstWidth,
-                        const    int     dstHeight)
+__kernel void transposeGradients(__global float * srcArray,
+                                 __global float * dstArray,
+                                 __local  float * lclArray,
+                                 const    int     srcWidth,
+                                 const    int     srcHeight,
+                                 const    int     dstWidth,
+                                 const    int     dstHeight)
 {
   
     const int xid = get_global_id(0);
