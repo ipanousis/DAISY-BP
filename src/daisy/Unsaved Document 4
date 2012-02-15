@@ -1,0 +1,43 @@
+
+#define CONV29Y_GROUP_SIZE_X 16
+#define CONV29Y_GROUP_SIZE_Y 16
+
+__kernel void convolve_29y(__global   float * massArray,
+                           __constant float * fltArray,
+                           __local    float * lclArray,
+                           const      int     pddWidth,
+                           const      int     pddHeight)
+{
+
+    const int r = get_global_id(1);
+    const int c = get_global_id(0);
+
+    const int srcOffset = r * pddWidth + c + pddWidth * pddHeight * 8 * 3; // section D
+
+    const int lx = get_local_id(0);
+    const int ly = get_local_id(1);
+
+    fltArray += (7+11+23);
+
+    // Load main data first
+    lclArray[(ly+14) * (CONV29Y_GROUP_SIZE_X+1) + lx] = massArray[srcOffset];
+
+    // Load local upper halo second
+    if(ly < 14){
+      lclArray[ly * (CONV29Y_GROUP_SIZE_X+1) + lx] = ((r % pddHeight) > 13 ? massArray[srcOffset-14*pddWidth]:lclArray[14 * (CONV29Y_GROUP_SIZE_X+1) + lx]);
+    }
+
+    // Load local lower halo third
+    if(ly > CONV29Y_GROUP_SIZE_Y-15){
+      lclArray[(ly+28) * (CONV29Y_GROUP_SIZE_X+1) + lx] = ((r % pddHeight) < pddHeight-14 ? massArray[srcOffset+14*pddWidth]:lclArray[(14+CONV29Y_GROUP_SIZE_Y-1) * (CONV29Y_GROUP_SIZE_X+1) + lx]);
+    }
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    float s = 0;
+    for(int i = ly; i < ly+29; i++)
+      s += lclArray[i * (CONV29Y_GROUP_SIZE_X+1) + lx] * fltArray[i-ly];
+
+    const int dstOffset = srcOffset - pddWidth * pddHeight * 8; // section C
+    massArray[dstOffset] = s;
+}

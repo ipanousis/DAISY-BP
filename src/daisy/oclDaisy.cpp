@@ -198,7 +198,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   short int DEBUG_ALL = 1;
 
-  float * inputArray = (float*)malloc(sizeof(float) * paddedWidth * paddedHeight);
+  float * inputArray = (float*)malloc(sizeof(float) * paddedWidth * paddedHeight * 8);
 
   // Pad edges of input array for i) to fit the workgroup size ii) convolution halo - resample nearest pixel
   int i;
@@ -226,7 +226,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   }
 
   cl_uint k;
-  float * testArray = (float*)malloc(sizeof(float) * paddedWidth * paddedHeight * 8);
+  float * testArray = (float*)malloc(sizeof(float) * paddedWidth * 200 * 16);
 
   // smooth with kernel size 7 (achieve sigma 1.6 from 0.5)
   
@@ -436,13 +436,18 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   // convolve Y - massBuffer sections: C to B
   
+  size_t convWorkerSize2d[2] = {daisy->paddedWidth, daisy->paddedHeight * daisy->gradientsNo};
+  size_t convGroupSize2d[2]  = {16, 16};
+
+  gettimeofday(&startParaTime,NULL);
   clSetKernelArg(daisy->oclPrograms.kernel_f23y, 0, sizeof(massBuffer), (void*)&massBuffer);
   clSetKernelArg(daisy->oclPrograms.kernel_f23y, 1, sizeof(filterBuffer), (void*)&filterBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f23y, 2, sizeof(int), (void*)&(daisy->paddedWidth));
-  clSetKernelArg(daisy->oclPrograms.kernel_f23y, 3, sizeof(int), (void*)&(daisy->paddedHeight));
+  clSetKernelArg(daisy->oclPrograms.kernel_f23y, 2, sizeof(float) * 38 * 17, 0);
+  clSetKernelArg(daisy->oclPrograms.kernel_f23y, 3, sizeof(int), (void*)&(daisy->paddedWidth));
+  clSetKernelArg(daisy->oclPrograms.kernel_f23y, 4, sizeof(int), (void*)&(daisy->paddedHeight));
 
-  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_f23y, 1, 
-                                 NULL, &(daisyCl->workerSize), &(daisyCl->groupSize),
+  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_f23y, 2, 
+                                 NULL, convWorkerSize2d, convGroupSize2d,
                                  0, NULL, NULL);
 
   if(error){
@@ -451,6 +456,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   }
 
   clFinish(daisyCl->queue);
+  gettimeofday(&endParaTime,NULL);
 
   error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
                               paddedWidth * paddedHeight * 8 * sizeof(float), 
@@ -563,9 +569,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   printf("Convolution to 7.5 sent!\n");
 
-  // transpose
-
-  // a) transpose SxGxHxW to SxHxWxG first
+  // A) transpose SxGxHxW to SxHxWxG first
 
   cl_mem transBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
                                       memorySize, (void*)NULL, &error);
@@ -604,9 +608,9 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   clFinish(daisyCl->queue);
 
-  // Verify transposition a)
+  // Verify transposition A)
   error = clEnqueueReadBuffer(daisyCl->queue, transBuffer, CL_TRUE,
-                      0, paddedWidth * paddedHeight * 8 * sizeof(float), testArray,
+                      paddedWidth * paddedHeight * 8 * 2 * sizeof(float), paddedWidth * paddedHeight * 8 * sizeof(float), testArray,
                       0, NULL, NULL);
 
   clFinish(daisyCl->queue);
@@ -620,7 +624,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
     printf("\n\n");
   }
 
-  // b) final transposition
+  // B) final transposition
   int windowHeight = 16;
   int windowWidth  = 16;
   int lclArrayPaddingS3 = 8;
@@ -630,7 +634,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   transGroupSize[0] = windowWidth;
   transGroupSize[1] = windowHeight;
 
-  gettimeofday(&startParaTime,NULL);
   // generate+deliver the transposition offset array
   float sigma3 = 7.5;
   float * petalOffsetsS3 = generatePetalOffsets(sigma3, daisy->petalsNo);
@@ -685,42 +688,63 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
                                  0, NULL, NULL);
   
   if(error){
-    fprintf(stderr, "oclDaisy.cpp::oclDaisy clEnqueueNDRangeKernel failed: %d\n",error);
+    fprintf(stderr, "oclDaisy.cpp::oclDaisy clEnqueueNDRangeKernel final trans failed: %d\n",error);
     return 1;
   }
-
-
-  /*__kernel void transposeDaisy(__global   float * srcArray,
-                             __global   float * dstArray,
-                             __constant int   * transArray,
-                             __local    float * lclArray,
-                             const      int     srcWidth,
-                             const      int     srcHeight,
-                             const      int     srcGlobalOffset,
-                             const      int     transArrayLength,
-                             const      int     lclArrayPadding)*/
-  
-                      
 
   clFinish(daisyCl->queue);
 
   // Verify transposition b)
-  error = clEnqueueReadBuffer(daisyCl->queue, daisyBuffer, CL_TRUE,
-                      0, paddedWidth * paddedHeight * 8 * sizeof(float), testArray,
-                      0, NULL, NULL);
+  int TESTING_TRANSD = 0;
+  if(TESTING_TRANSD){
 
-  clFinish(daisyCl->queue);
+    float * daisyArray = (float*)malloc(sizeof(float) * 200 * paddedWidth * paddedHeight);
 
-  dstWidth = paddedWidth * daisy->gradientsNo * daisy->totalPetalsNo;
-  printf("\nDaisy Transpose:\n");
-  for(r = 0; r < 10; r++){
-    printf("Row %d: %f",r,testArray[r * dstWidth]);
-    for(k = 1; k < 25; k++)
-      printf(", %f", testArray[r * dstWidth + k]);
-    printf("\n\n");
+    error = clEnqueueReadBuffer(daisyCl->queue, daisyBuffer, CL_TRUE,
+                        0, paddedWidth * paddedHeight * 200 * sizeof(float), daisyArray,
+                        0, NULL, NULL);
+
+    clFinish(daisyCl->queue);
+    /*for(r = 10; r < 16; r++){
+      for(k = 0; k < 25; k++)
+        printf(", %f",daisyArray[r * paddedWidth * 200 + k]);
+      printf("\n\n");
+    }*/
+    
+    int topLeftY = 16;
+    int topLeftX = 16;
+    int yStep = 16;
+    int xStep = 16;
+    int y,x;
+    for(y = topLeftY; y < paddedHeight-topLeftY; y+=yStep){
+      for(x = topLeftX; x < paddedWidth-topLeftX; x+=xStep){
+        // Verify pair 202
+        //printf("Testing yx %d,%d\n",y,x);
+        int p;
+        for(p = 0; p < transOffsetsS3Length; p++){
+          int src1 = (transOffsetsS3[p * 4] / 16 + y) * paddedWidth * 8 + (transOffsetsS3[p * 4] % 16 + x) * 8;
+          int src2 = (transOffsetsS3[p * 4+1] / 16 + y) * paddedWidth * 8 + (transOffsetsS3[p * 4+1] % 16 + x) * 8;
+          int dst  = floor(transOffsetsS3[p * 4+2] / 1000.0f);
+          int petal = transOffsetsS3[p * 4+3];
+          dst = (dst + y) * paddedWidth * 200 + (transOffsetsS3[p * 4+2] - dst * 1000 - 500 + x) * 200 + (17+petal) * 8;
+          int j;
+          for(j = 0; j < 8; j++){
+            if(fabs(daisyArray[dst+j] - testArray[src1+j]) > 0.00001){
+              printf("P%d - Issue at (1)%d,%d\n",p,y,x);
+            }
+          }
+          if(transOffsetsS3[p * 4+1] != TR_PAIRS_SINGLE_ONLY){
+            for(j = 8; j < 16; j++){
+              if(fabs(daisyArray[dst+j] - testArray[src2+j%8]) > 0.00001){
+                printf("P%d - Issue at (2)%d,%d\n",p,y,x);
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
-  gettimeofday(&endParaTime,NULL);
 
   // Buffers to release;
   // massBuffer
@@ -734,7 +758,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
 
   diffp = endt-startt;
-  printf("\nConvolutions: %.3fs\n",diffp);
+  printf("\nDaisy: %.4fs\n",diffp);
 
   free(inputArray);
   free(testArray);

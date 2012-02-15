@@ -1,4 +1,3 @@
-
 __kernel void convolve_7x(__global   float * massArray,
                           __constant float * fltArray,
                           const      int     pddWidth,
@@ -31,7 +30,6 @@ __kernel void convolve_7x(__global   float * massArray,
     const int dstOffset = pddWidth * pddHeight + r * pddWidth + c;
     massArray[dstOffset] = s;
 }
-
 __kernel void convolve_7y(__global   float * massArray,
                           __constant float * fltArray,
                           const      int     pddWidth,
@@ -61,13 +59,8 @@ __kernel void convolve_7y(__global   float * massArray,
 
     barrier(CLK_LOCAL_MEM_FENCE);
     float s = 0;
-    s += l_srcArray[l] * fltArray[0];
-    s += l_srcArray[l+1] * fltArray[1];
-    s += l_srcArray[l+2] * fltArray[2];
-    s += l_srcArray[l+3] * fltArray[3];
-    s += l_srcArray[l+4] * fltArray[4];
-    s += l_srcArray[l+5] * fltArray[5];
-    s += l_srcArray[l+6] * fltArray[6];
+    for(int i = l; i < l+7; i++)
+      s += l_srcArray[i] * fltArray[i-l];
 
     const int dstOffset = pddWidth * pddHeight * 8 + c * pddWidth + r;
     massArray[dstOffset] = s;
@@ -122,7 +115,6 @@ __kernel void gradient_8all(__global float * massArray,
   massArray[dstOffset+6*push] = gradients.s6;
   massArray[dstOffset+7*push] = gradients.s7;
 }
-
 #define CONV7_GROUP_SIZE_X 64
 __kernel void convolve_11x(__global   float * massArray,
                            __constant float * fltArray,
@@ -156,66 +148,41 @@ __kernel void convolve_11x(__global   float * massArray,
 
   massArray[dstOffset] = s;
 }
-
 __kernel void convolve_11y(__global   float * massArray,
                            __constant float * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
-
-    const int r = get_global_id(0) / pddHeight;
-    const int c = get_global_id(0) % pddHeight;
-
-    __global float * srcArray = massArray + c * pddWidth + r + pddWidth * pddHeight * 8; // section B
-    __global float * dstArray = massArray + c * pddWidth + r; // section A
-
-    const int localSize = get_local_size(0);
-    const int l = c % localSize;
-
-    __local float l_srcArray[64 + 10];
-
-    fltArray += 7;
-
-    for(int o = 0; o < 8; o++){
-
-      l_srcArray[l + 5] = srcArray[0]; // center value
-      if(l < 5)
-        l_srcArray[l] = (c > 4 ? srcArray[(l-5) * pddWidth]:l_srcArray[5]);
-      else if(l > localSize-6)
-        l_srcArray[l+10] = (c < pddHeight-5 ? srcArray[(l-localSize+6) * pddWidth]:l_srcArray[localSize+4]);
-      
-      barrier(CLK_LOCAL_MEM_FENCE);
-
-      float4 v, f;
-      float4 s = 0;
-
-      v = vload4(0, l_srcArray + l);
-      f = vload4(0, fltArray);
-      s += v * f;
-      v = vload4(0, l_srcArray + l + 4);
-      f = vload4(0, fltArray + 4);
-      s += v * f;
-      v.xyz = vload3(0, l_srcArray + l + 8);
-      f.xyz = vload3(0, fltArray + 8);
-      s.xyz += v.xyz * f.xyz;
-
-      dstArray[0] = s.x + s.y + s.z + s.w;
-
-      srcArray += pddWidth * pddHeight;
-      dstArray += pddWidth * pddHeight;
-
-  }
+  const int r = get_global_id(0) / pddHeight;
+  const int c = get_global_id(0) % pddHeight;
+  __global float * srcArray = massArray + c * pddWidth + r + pddWidth * pddHeight * 8; // section B
+  __global float * dstArray = massArray + c * pddWidth + r; // section A
+  const int localSize = get_local_size(0);
+  const int l = c % localSize;
+  __local float l_srcArray[64 + 10];
+  fltArray += 7;
+  for(int o = 0; o < 8; o++){
+    l_srcArray[l + 5] = srcArray[0]; // center value
+    if(l < 5)
+      l_srcArray[l] = (c > 4 ? srcArray[(l-5) * pddWidth]:l_srcArray[5]);
+    else if(l > localSize-6)
+      l_srcArray[l+10] = (c < pddHeight-5 ? srcArray[(l-localSize+6) * pddWidth]:l_srcArray[localSize+4]);
+    barrier(CLK_LOCAL_MEM_FENCE);
+    float s = 0;
+    for(int i = l; i < l+11; i++)
+      s += l_srcArray[i] * fltArray[i-l]; 
+    dstArray[0] = s;
+    srcArray += pddWidth * pddHeight;
+    dstArray += pddWidth * pddHeight;
 }
-
+}
 #define CONV23_GROUP_SIZE_X 64
-
 __kernel void convolve_23x(__global   float * massArray,
                            __constant float * fltArray,
                            __local    float * lclArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
-
   const int r = get_global_id(0) / pddWidth;
   const int c = get_global_id(0) % pddWidth;
 
@@ -243,70 +210,36 @@ __kernel void convolve_23x(__global   float * massArray,
   massArray[dstOffset] = s;
 
 }
-
 __kernel void convolve_23y(__global   float * massArray,
                            __constant float * fltArray,
+                           __local    float * lclArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
-
-    const int r = get_global_id(0) / pddHeight;
-    const int c = get_global_id(0) % pddHeight;
-
-    __global float * srcArray = massArray + c * pddWidth + r + pddWidth * pddHeight * 8 * 2; // section C
-    __global float * dstArray = massArray + c * pddWidth + r + pddWidth * pddHeight * 8; // section B
-
-    const int localSize = get_local_size(0);
-    const int l = c % localSize;
-
-    __local float l_srcArray[64 + 22];
-
-    fltArray += (7+11);
-
-    for(int o = 0; o < 8; o++){
-
-      l_srcArray[l + 11] = srcArray[0]; // center value
-      if(l < 11){
-        l_srcArray[l] = (c > 10 ? srcArray[(l-11)*pddWidth]:l_srcArray[11]);
-      }
-      else if(l > localSize-12){
-        l_srcArray[l + 22] = (c < pddHeight-11 ? srcArray[(l - localSize + 12)*pddWidth]:l_srcArray[localSize+10]);
-      }
-
-      barrier(CLK_LOCAL_MEM_FENCE);
-
-      float4 v, f;
-      float4 s = 0;
-
-      v = vload4(0, l_srcArray + l);
-      f = vload4(0, fltArray);
-      s += v * f;
-      v = vload4(1, l_srcArray + l);
-      f = vload4(1, fltArray);
-      s += v * f;
-      v = vload4(2, l_srcArray + l);
-      f = vload4(2, fltArray);
-      s += v * f;
-      v = vload4(3, l_srcArray + l);
-      f = vload4(3, fltArray);
-      s += v * f;
-      v = vload4(4, l_srcArray + l);
-      f = vload4(4, fltArray);
-      s += v * f;
-      v.xyz = vload3(0, l_srcArray + l + 20);
-      f.xyz = vload3(0, fltArray + 20);
-      s.xyz += v.xyz * f.xyz;
-
-      dstArray[0] = s.x + s.y + s.z + s.w;
-
-      srcArray += pddWidth * pddHeight;
-      dstArray += pddWidth * pddHeight;
-
+  const int yid = get_global_id(1);
+  const int xid = get_global_id(0);
+  const int srcOffset = yid * pddWidth + xid + pddWidth * pddHeight * 8 * 2;
+  const int dstOffset = yid * pddWidth + xid + pddWidth * pddHeight * 8;
+  const int lx = get_local_id(0);
+  const int ly = get_local_id(1);
+  // Load main data first
+  lclArray[(ly+11) * (16+1) + lx] = massArray[srcOffset];
+  fltArray += (7+11);
+  // Load local upper halo second
+  if(ly < 11){
+    lclArray[ly * (16+1) + lx] = ((yid % pddHeight) > 10 ? massArray[srcOffset-11*pddWidth]:lclArray[11 * (16+1) + lx]);
   }
+  // Load local lower halo third
+  if(ly > 16-12){
+    lclArray[(ly+22) * (16+1) + lx] = ((yid % pddHeight) < pddHeight-11 ? massArray[srcOffset+11*pddWidth]:lclArray[(11+16-1) * (16+1) + lx]);
+  }
+  barrier(CLK_LOCAL_MEM_FENCE);
+  float s = 0;
+  for(int i = ly; i < ly+23; i++)
+    s += lclArray[i * (16+1) + lx] * fltArray[i-ly];
+  massArray[dstOffset] = s;
 }
-
 #define CONV29X_GROUP_SIZE_X 64
-
 __kernel void convolve_29x(__global   float * massArray,
                            __constant float * fltArray,
                            __local    float * lclArray,
@@ -339,53 +272,54 @@ __kernel void convolve_29x(__global   float * massArray,
   const int dstOffset = r * pddWidth + c + pddWidth * pddHeight * 8 * 3; // section D
   massArray[dstOffset] = s;
 }
-
 #define GRADIENT_NUM 8
 #define TOTAL_PETALS_NO 25
 #define REGION_PETALS_NO 8
-
+#define TRANSD_DATA_HEIGHT 16
+#define TRANSD_DATA_WIDTH 16
 #define TRANSD_PAIRS_OFFSET_WIDTH 1000
 #define TRANSD_PAIRS_SINGLE_ONLY -999
-
 __kernel void transposeDaisy(__global   float * srcArray,
                              __global   float * dstArray,
                              __constant int   * transArray,
-                             __local    float * lclArray,    //lclArray[16][16 * 8 + PADDING]
+                             __local    float * lclArray,
                              const      int     srcWidth,
                              const      int     srcHeight,
                              const      int     srcGlobalOffset,
                              const      int     transArrayLength,
                              const      int     lclArrayPadding) // either 0 or 8
 {
-  const int xid = get_global_id(0);
-  const int yid = get_global_id(1);
-  
+  const int xid = get_global_id(0); // 0 - srcWidth-1
+  const int yid = get_global_id(1); // 0 - srcHeight-1
+
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
 
   // coalesced read (srcGlobalOffset + xid,yid) + padded write to lclArray
-  const int stepsPerWorker = (srcWidth * GRADIENT_NUM) / get_global_size(0); // with 16x16 will be 8
+  const int stepsPerWorker = (srcWidth * GRADIENT_NUM) / get_global_size(0); // => globalSizeX must divide 512 (16,32,64,128,256)
   for(int i = 0; i < stepsPerWorker; i++){
-    lclArray[ly * (16 * GRADIENT_NUM + lclArrayPadding)                     // local Y
+    lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENT_NUM + lclArrayPadding)      // local Y
               + get_local_size(0) * i + lx] =                               // local X
         srcArray[srcGlobalOffset + yid * srcWidth * GRADIENT_NUM +          // global offset + global Y
           (get_group_id(0) * stepsPerWorker + i) * get_local_size(0) + lx]; // global X
   }
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  // non-bank-conflicting (at least attempted) read with transArray as well as
-  // coalesced write
+  // non-bank-conflicting (at least attempted) read with transArray as well as coalesced write
   const int pairsPerHalfWarp = transArrayLength / ((get_local_size(0) * get_local_size(1)) / 16);
   const int halfWarps = (get_local_size(1) * get_local_size(0)) / 16;
-  const int halfWarpId = (get_local_id(1) * get_local_size(0) + get_local_id(0)) / 16;
+  const int halfWarpId = (ly * get_local_size(0) + lx) / 16;
 
-  const int topLeftY = get_group_id(1) * get_local_size(1);
-  const int topLeftX = get_group_id(0) * get_local_size(0);
+  const int topLeftY = get_group_id(1) * TRANSD_DATA_HEIGHT;
+  const int topLeftX = get_group_id(0) * TRANSD_DATA_WIDTH;
   const int dstGroupOffset = (topLeftY * srcWidth + topLeftX) * GRADIENT_NUM * TOTAL_PETALS_NO;
 
   const int petalRegion = (srcGlobalOffset / (srcWidth * GRADIENT_NUM)) / srcHeight;
 
-  for(int p = pairsPerHalfWarp * halfWarpId; p < (halfWarpId == halfWarps-1 ? transArrayLength : pairsPerHalfWarp * (halfWarpId+1)); p++){
+  const int offset = (halfWarpId < (transArrayLength % pairsPerHalfWarp) ? halfWarpId : (transArrayLength % pairsPerHalfWarp));
+  for(int p = pairsPerHalfWarp * halfWarpId + offset; 
+          p < (halfWarpId == halfWarps-1 ? transArrayLength : pairsPerHalfWarp * (halfWarpId+1) + offset + (halfWarpId < transArrayLength % pairsPerHalfWarp)); 
+          p++){
     const int fromP1   = transArray[p * 4];
     const int fromP2   = transArray[p * 4 + 1];
     const int toOffset = transArray[p * 4 + 2];
@@ -396,22 +330,19 @@ __kernel void transposeDaisy(__global   float * srcArray,
 
     const int intraHalfWarpOffset = (lx >= 8) * (fromP2-fromP1);
 
-    // allow only workers 0-7 to write if this is a single
-    //if(fromP2 != TRANSD_PAIRS_SINGLE_ONLY || (lx < 8)){
-
-      dstArray[dstGroupOffset 
+    if(topLeftY+toOffsetY < 0 || topLeftY+toOffsetY >= srcHeight
+    || topLeftX+toOffsetX < 0 || topLeftX+toOffsetX >= srcWidth)
+    {     }
+    else if(fromP2 != TRANSD_PAIRS_SINGLE_ONLY || (lx < 8)){
+      dstArray[dstGroupOffset
                + (toOffsetY * srcWidth + toOffsetX) * GRADIENT_NUM * TOTAL_PETALS_NO
-               + (petalRegion * REGION_PETALS_NO + 1 + petalNo) * GRADIENT_NUM + lx] = 
+               + (petalRegion * REGION_PETALS_NO + 1 + petalNo) * GRADIENT_NUM + lx] =
 
-        lclArray[((fromP1+intraHalfWarpOffset) / 16) * (16 * GRADIENT_NUM + lclArrayPadding) + ((fromP1+intraHalfWarpOffset) % 16) * GRADIENT_NUM + lx % 8];
-    //}
+        lclArray[((fromP1+intraHalfWarpOffset) / TRANSD_DATA_WIDTH) * (TRANSD_DATA_WIDTH * GRADIENT_NUM + lclArrayPadding) 
+               + ((fromP1+intraHalfWarpOffset) % TRANSD_DATA_WIDTH) * GRADIENT_NUM + lx % 8];
+    }
   }
-  // todo;
-  // (lclArray read)
-  // skip pairs/singles outside of the boundaries
-  // make independent of localSizeY,localSizeX,stepsPerWorker - after got it working
 }
-
 #define TRANS_GROUP_SIZE_X 32
 #define TRANS_GROUP_SIZE_Y 8
 __kernel void transposeGradients(__global float * srcArray,
@@ -422,7 +353,6 @@ __kernel void transposeGradients(__global float * srcArray,
                                  const    int     dstWidth,
                                  const    int     dstHeight)
 {
-  
     const int xid = get_global_id(0);
     const int yid = get_global_id(1);
 
@@ -450,3 +380,4 @@ __kernel void transposeGradients(__global float * srcArray,
 
     dstArray[dstIndex] = lclArray[localY * (TRANS_GROUP_SIZE_X+1) + localX];
 }
+
