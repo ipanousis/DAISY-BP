@@ -2,22 +2,24 @@
 HIGH
 ---
 *DAISY implementation baby oh yeah
-  - convolutions - optimise the ones in Y to run in same time as X
+  - convolutions - optimise X and Y
   - transpositions - profile + optimise
-  - manage sectioning of input images into 1024x1024 sections for larger images
   - manage sectioning of images into 512x512 during final transposition
-  - make final transposition parameters (workgroup size + steps per worker) changeable
 (transposeDaisy kernel)
   // todo;
   // require group size 16x16
   // fill zeros in petals that source outside the borders - center-symmetrical property of petals?
   // simplify?
+  - compare to CPU daisy
+  - benchmark GPU against CPU
+  - consider downsampling with higher sigmas
 ---
 MEDIUM
 ---
 test data
 record performance test results with visual profiler
 BP implementation
+manage sectioning of input images into 1024x1024 sections for larger images
 ---
 LOW
 ---
