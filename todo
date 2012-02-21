@@ -30,6 +30,7 @@ software license?
 *belief propagation matching - heavy reading papers/code understand bp - understood up until a point, read sift flow code or other to understand properly, wait until DAISY is done
 -choose objective function for BP - vaguely done, leave for later
 GIT setup online github
+*convolutions should rely only on x64 padding not x128, some are on x128 now
 ---
 WAIT
 ---
