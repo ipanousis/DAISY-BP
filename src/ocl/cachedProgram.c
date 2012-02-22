@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 cl_program CreateProgram(cl_context context, cl_device_id device, 
-                         char * clFilename, const char * options){
+                         const char * clFilename, const char * options){
 
   // load kernel source from .cl file and generate program
 
@@ -19,9 +19,9 @@ cl_program CreateProgram(cl_context context, cl_device_id device,
 
   }
 
-  char srcStr[16384];
+  char srcStr[65536];
 
-  fread(srcStr, 1, 16384, fp);
+  error = (cl_int)fread(srcStr, 1, 65536, fp);
 
   fclose(fp);
 
@@ -61,7 +61,8 @@ cl_program CreateProgram(cl_context context, cl_device_id device,
 }
 
 cl_program CreateProgramFromBinary(cl_context context, cl_device_id device, 
-                                   char * binaryName, const char * options){
+                                   const char * binaryName, const char * options){
+  cl_int error;
 
   // load binary .cl.bin
   FILE * fp = fopen(binaryName, "rb");
@@ -80,10 +81,9 @@ cl_program CreateProgramFromBinary(cl_context context, cl_device_id device,
   // Load binary from disk
   unsigned char * programBinary = (unsigned char*) malloc(sizeof(unsigned char) 
                                                           * binarySize);
-  fread(programBinary, 1, binarySize, fp);
+  error = (cl_int)fread(programBinary, 1, binarySize, fp);
   fclose(fp);
 
-  cl_int error = 0;
   cl_program program = NULL;
   cl_int binaryStatus;
 
@@ -210,7 +210,7 @@ cl_int SaveProgramBinary(cl_program program, cl_device_id device, char * binaryN
 
 }
 
-cl_int buildCachedProgram(ocl_constructs * occs, char * filebase, const char * options){
+cl_int buildCachedProgram(ocl_constructs * occs, const char * filebase, const char * options){
 
   cl_int error = 0;
 

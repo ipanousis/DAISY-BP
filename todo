@@ -2,7 +2,7 @@
 HIGH
 ---
 *DAISY implementation baby oh yeah
-  - convolutions - optimise X and Y
+  - convolutions - optimise X and Y (only 29's)
   - transpositions - profile + optimise
   - manage sectioning of images into 512x512 during final transposition
 (transposeDaisy kernel)

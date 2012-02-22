@@ -4,10 +4,10 @@
 
 #define CACHED_PROGRAM
 
-cl_program CreateProgram(cl_context, cl_device_id, char *, const char *);
+cl_program CreateProgram(cl_context, cl_device_id, const char *, const char *);
 
-cl_program CreateProgramFromBinary(cl_context, cl_device_id, char *, const char*);
+cl_program CreateProgramFromBinary(cl_context, cl_device_id, const char *, const char*);
 
-cl_int SaveProgramBinary(cl_program, cl_device_id, char*);
+cl_int SaveProgramBinary(cl_program, cl_device_id, const char*);
 
-cl_int buildCachedProgram(ocl_constructs*, char*, const char *);
+cl_int buildCachedProgram(ocl_constructs*, const char*, const char *);

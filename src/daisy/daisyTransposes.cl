@@ -69,28 +69,29 @@ __kernel void transposeDaisy(__global   float * srcArray,
     }
   }
 }
+#define GRADIENT_NUM 8
+#define TOTAL_PETALS_NO 25
+#define REGION_PETALS_NO 8
 #define TRANS_GROUP_SIZE_X 32
 #define TRANS_GROUP_SIZE_Y 8
 __kernel void transposeGradients(__global float * srcArray,
                                  __global float * dstArray,
-                                 __local  float * lclArray,
                                  const    int     srcWidth,
                                  const    int     srcHeight,
                                  const    int     dstWidth,
                                  const    int     dstHeight)
 {
-    const int xid = get_global_id(0);
-    const int yid = get_global_id(1);
-
     const int smoothSectionHeight = srcHeight * GRADIENT_NUM;
 
-    const int smoothSection = yid / smoothSectionHeight;
+    const int smoothSection = get_global_id(1) / smoothSectionHeight;
 
-    const int groupRow = (yid % smoothSectionHeight) / 8;
+    const int groupRow = (get_global_id(1) % smoothSectionHeight) / 8;
 
     const int groupRowGradientSection = get_local_id(1);
 
-    const int srcIndex = (smoothSection * smoothSectionHeight + groupRowGradientSection * srcHeight + groupRow) * srcWidth + xid;
+    const int srcIndex = (smoothSection * smoothSectionHeight + groupRowGradientSection * srcHeight + groupRow) * srcWidth + get_global_id(0);
+
+    __local float lclArray[(TRANS_GROUP_SIZE_X+1) * TRANS_GROUP_SIZE_Y];
 
     lclArray[get_local_id(1) * (TRANS_GROUP_SIZE_X+1) + get_local_id(0)] = srcArray[srcIndex];
 
@@ -102,7 +103,5 @@ __kernel void transposeGradients(__global float * srcArray,
     const int dstRow = smoothSection * dstHeight + groupRow;
     const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
 
-    const int dstIndex = dstRow * dstWidth + dstCol;
-
-    dstArray[dstIndex] = lclArray[localY * (TRANS_GROUP_SIZE_X+1) + localX];
+    dstArray[dstRow * dstWidth + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+1) + localX];
 }
