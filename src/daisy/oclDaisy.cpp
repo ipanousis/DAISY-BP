@@ -1,7 +1,16 @@
 #include "oclDaisy.h"
 #include <sys/time.h>
 
+float * generatePetalOffsets(float, int, short int);
+
+int * generateTranspositionOffsets(int, int, float*, int, int*, int*);
+
 // transposition offsets case where petal is left over and cannot be paired
+//
+// maximum width that this TR_BLOCK_SIZE is effective on (assuming at least 
+// TR_DATA_WIDTH rows should be allocated per block) is currently 16384
+#define TR_BLOCK_SIZE 512*512
+#define TR_DATA_WIDTH 16
 #define TR_PAIRS_SINGLE_ONLY -999
 #define TR_PAIRS_OFFSET_WIDTH 1000
 
@@ -16,6 +25,7 @@ daisy_params * newDaisyParams(unsigned char* array, int height, int width,
   params->petalsNo = petalsNo;
   params->smoothingsNo = smoothingsNo;
   params->totalPetalsNo = petalsNo * smoothingsNo + 1;
+  params->descriptors = NULL;
 
   return params;
 }
@@ -622,7 +632,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   if(DEBUG_ALL){
     // Verify transposition A)
     error = clEnqueueReadBuffer(daisyCl->queue, transBuffer, CL_TRUE,
-                                paddedWidth * paddedHeight * 8 * 2 * sizeof(float), 
+                                paddedWidth * paddedHeight * 8 * 1 * sizeof(float), 
                                 paddedWidth * paddedHeight * 8 * sizeof(float), testArray,
                                 0, NULL, NULL);
 
@@ -639,27 +649,34 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   }
 
   // B) final transposition
+  //int daisyBlockWidth = daisy->paddedWidth;
+  //int daisyBlockHeight = TR_BLOCK_SIZE / daisyBlockWidth;
   int daisyBlockWidth = 512;
+  int daisyBlockHeight = 512;
 
-  unsigned long int daisySectionSize = daisyBlockWidth * daisyBlockWidth * daisy->totalPetalsNo * daisy->gradientsNo * sizeof(float);
+  printf("\nBlock Size calculated (HxW): %dx%d\n",daisyBlockHeight,daisyBlockWidth);
+
+  unsigned long int daisySectionSize = daisyBlockWidth * daisyBlockHeight * daisy->totalPetalsNo * daisy->gradientsNo * sizeof(float);
 
   printf("\nAllocated %ld bytes on GPU for daisy section buffer (%ldMB)\n",daisySectionSize,daisySectionSize/(1024*1024));
 
   cl_mem daisyBufferA = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY,
-                                      daisySectionSize,(void*)NULL, &error);
+                                       daisySectionSize,(void*)NULL, &error);
+  //cl_mem daisyBufferB = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY,
+  //                                     daisySectionSize,(void*)NULL, &error);
 
   oclError("oclDaisy","clCreateBuffer (daisy)",error);
 
-  int windowHeight = 16;
-  int windowWidth  = 16;
+  int windowHeight = TR_DATA_WIDTH;
+  int windowWidth  = TR_DATA_WIDTH;
 
   size_t daisyGroupSize[2] = {windowWidth,windowHeight};
-  size_t daisyWorkerSize[2] = {daisyBlockWidth + 2 * daisyGroupSize[0],daisyBlockWidth + 2 * daisyGroupSize[1]};
+  size_t daisyWorkerSize[2] = {daisyBlockWidth + 2 * daisyGroupSize[0],daisyBlockHeight + 2 * daisyGroupSize[1]};
 
   float sigmas[3] = {2.5,5,7.5};
   int lclArrayPaddings[3] = {0,0,8};
   
-  int totalSections = (daisy->paddedWidth / daisyBlockWidth) * (daisy->paddedHeight / daisyBlockWidth);
+  int totalSections = (daisy->paddedWidth / daisyBlockWidth) * (daisy->paddedHeight / daisyBlockHeight);
 
   gettimeofday(&startParaTime,NULL);
 
@@ -670,21 +687,27 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
     int sectionY = sectionNo / (daisy->paddedWidth / daisyBlockWidth);
     int sectionX = sectionNo % (daisy->paddedWidth / daisyBlockWidth);
 
-    size_t daisyWorkerOffsets[2] = {sectionX * daisyBlockWidth,sectionY * daisyBlockWidth};
+    size_t daisyWorkerOffsets[2] = {sectionX * daisyBlockWidth,sectionY * daisyBlockHeight};
       
-    for(int smoothingNo = 2; smoothingNo < 2; smoothingNo++){
+    for(int smoothingNo = 0; smoothingNo < 3; smoothingNo++){
 
-      float * petalOffsets = generatePetalOffsets(sigmas[smoothingNo], daisy->petalsNo);
+      int petalsNo = daisy->petalsNo + (smoothingNo==0);
+
+      printf("Running daisy section (%d,%d) out of %d - smoothing %d\n",sectionY,sectionX,totalSections,smoothingNo);
+
+      float * petalOffsets = generatePetalOffsets(sigmas[smoothingNo], daisy->petalsNo, (smoothingNo==0));
 
       int pairOffsetsLength, actualPairs;
       int * pairOffsets = generateTranspositionOffsets(windowHeight, windowWidth,
-                                                       petalOffsets, daisy->petalsNo,
+                                                       petalOffsets, petalsNo,
                                                        &pairOffsetsLength, &actualPairs);
 
       int srcGlobalOffset = daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo * smoothingNo;
 
       cl_mem pairOffsetBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                                pairOffsetsLength * 4 * sizeof(int), (void*)pairOffsets, &error);
+
+      oclError("oclDaisy","clCreateBuffer (6)",error);
 
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 0, sizeof(transBuffer), (void*)&transBuffer);
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 1, sizeof(daisyBufferA), (void*)&daisyBufferA);
@@ -702,74 +725,100 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
       
       oclError("oclDaisy","clEnqueueNDRangeKernel (11)",error);
 
-      clFinish(daisyCl->queue);
+      error = clFinish(daisyCl->queue);
 
-      clReleaseMemObject(pairOffsetBuffer);
+      oclError("oclDaisy","clFinish (daisy)",error);
+
+      error = clReleaseMemObject(pairOffsetBuffer);
+
+      oclError("oclDaisy","clReleaseMemObject (pairOffsetBuffer)",error);
+
+      //
+      // VERIFICATION CODE
+      //
+
+      // Verify transposition b)
+      int TESTING_TRANSD = 0;
+      if(TESTING_TRANSD){
+
+        int petalStart = (smoothingNo > 0 ? smoothingNo * daisy->petalsNo + 1 : 0);
+
+        printf("\nPetalsNo = %d\n",petalsNo);
+        printf("\nPaired Offsets: %d\n", pairOffsetsLength);
+        printf("Actual Pairs: %d\n", actualPairs);
+
+        float * daisyArray = (float*)malloc(sizeof(float) * 200 * daisyBlockWidth * daisyBlockHeight);
+
+        error = clEnqueueReadBuffer(daisyCl->queue, daisyBufferA, CL_TRUE,
+                            0, daisyBlockWidth * daisyBlockHeight * 200 * sizeof(float), daisyArray,
+                            0, NULL, NULL);
+
+        oclError("oclDaisy","clEnqueueReadBuffer (12)",error);
+
+        clFinish(daisyCl->queue);
+        for(int r = 0; r < 64; r+=16){
+          for(k = petalStart * 8; k < (petalStart+petalsNo+2) * 8; k++)
+            printf(", %f",daisyArray[r * daisyBlockWidth * 200 + k]);
+          printf("\n\n");
+        }
+
+        error = clEnqueueReadBuffer(daisyCl->queue, transBuffer, CL_TRUE,
+                                    paddedWidth * paddedHeight * 8 * smoothingNo * sizeof(float), 
+                                    paddedWidth * paddedHeight * 8 * sizeof(float), testArray,
+                                    0, NULL, NULL);
+
+        clFinish(daisyCl->queue);
+
+        int topLeftY = 16;
+        int topLeftX = 16;
+        int yStep = 16;
+        int xStep = 16;
+        int y,x;
+        int yBlockOffset = sectionY * daisyBlockHeight;
+        int xBlockOffset = sectionX * daisyBlockWidth;
+        for(y = topLeftY; y < daisyBlockHeight-topLeftY; y+=yStep){
+          for(x = topLeftX; x < daisyBlockWidth-topLeftX; x+=xStep){
+            //printf("Testing yx %d,%d\n",y,x);
+            int p;
+            for(p = 0; p < pairOffsetsLength; p++){
+              int src1 = (yBlockOffset + pairOffsets[p * 4] / 16 + y) * paddedWidth * 8 + (xBlockOffset + pairOffsets[p * 4] % 16 + x) * 8;
+              int src2 = (yBlockOffset + pairOffsets[p * 4+1] / 16 + y) * paddedWidth * 8 + (xBlockOffset + pairOffsets[p * 4+1] % 16 + x) * 8;
+              int dst  = floor(pairOffsets[p * 4+2] / 1000.0f);
+              int petal = pairOffsets[p * 4+3];
+              dst = (dst + y) * daisyBlockWidth * 200 + (pairOffsets[p * 4+2] - dst * 1000 - 500 + x) * 200 + (petalStart+petal) * 8;
+              int j;
+              for(j = 0; j < 8; j++){
+                if(fabs(daisyArray[dst+j] - testArray[src1+j]) > 0.00001){
+                  printf("P%d - Issue at (1)%d,%d\n",p,y,x);
+                }
+              }
+              if(pairOffsets[p * 4+1] != TR_PAIRS_SINGLE_ONLY){
+                for(j = 8; j < 16; j++){
+                  if(fabs(daisyArray[dst+j] - testArray[src2+j%8]) > 0.00001){
+                    printf("P%d - Issue at (2)%d,%d\n",p,y,x);
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        free(daisyArray);
+      }
+
+      //
+      // END OF VERIFICATION CODE
+      //
     }
   }
 
-  gettimeofday(&endParaTime,NULL);
+  gettimeofday(&endParaTime,NULL); // including verification currently
 
   startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
   endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
   diffp = endt-startt;
   printf("\nTransDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight*daisy->gradientsNo*daisy->smoothingsNo)/(1000000.0f*diffp));
 
-  // Verify transposition b)
-  /*int TESTING_TRANSD = 0;
-  if(TESTING_TRANSD){
-
-    printf("\nPaired Offsets: %d\n", transOffsetsS3Length);
-    printf("Actual Pairs: %d\n", actualPairsS3);
-
-    float * daisyArray = (float*)malloc(sizeof(float) * 200 * paddedWidth * paddedHeight);
-
-    error = clEnqueueReadBuffer(daisyCl->queue, daisyBuffer, CL_TRUE,
-                        0, paddedWidth * paddedHeight * 200 * sizeof(float), daisyArray,
-                        0, NULL, NULL);
-
-    clFinish(daisyCl->queue);*/
-    /*for(r = 10; r < 16; r++){
-      for(k = 0; k < 25; k++)
-        printf(", %f",daisyArray[r * paddedWidth * 200 + k]);
-      printf("\n\n");
-    }*/
-    
-    /*int topLeftY = 16;
-    int topLeftX = 16;
-    int yStep = 16;
-    int xStep = 16;
-    int y,x;
-    for(y = topLeftY; y < paddedHeight-topLeftY; y+=yStep){
-      for(x = topLeftX; x < paddedWidth-topLeftX; x+=xStep){
-        // Verify pair 202
-        //printf("Testing yx %d,%d\n",y,x);
-        int p;
-        for(p = 0; p < transOffsetsS3Length; p++){
-          int src1 = (transOffsetsS3[p * 4] / 16 + y) * paddedWidth * 8 + (transOffsetsS3[p * 4] % 16 + x) * 8;
-          int src2 = (transOffsetsS3[p * 4+1] / 16 + y) * paddedWidth * 8 + (transOffsetsS3[p * 4+1] % 16 + x) * 8;
-          int dst  = floor(transOffsetsS3[p * 4+2] / 1000.0f);
-          int petal = transOffsetsS3[p * 4+3];
-          dst = (dst + y) * paddedWidth * 200 + (transOffsetsS3[p * 4+2] - dst * 1000 - 500 + x) * 200 + (17+petal) * 8;
-          int j;
-          for(j = 0; j < 8; j++){
-            if(fabs(daisyArray[dst+j] - testArray[src1+j]) > 0.00001){
-              printf("P%d - Issue at (1)%d,%d\n",p,y,x);
-            }
-          }
-          if(transOffsetsS3[p * 4+1] != TR_PAIRS_SINGLE_ONLY){
-            for(j = 8; j < 16; j++){
-              if(fabs(daisyArray[dst+j] - testArray[src2+j%8]) > 0.00001){
-                printf("P%d - Issue at (2)%d,%d\n",p,y,x);
-              }
-            }
-          }
-        }
-      }
-    }
-  }*/
-
-  clReleaseMemObject(daisyBufferA);
 
   gettimeofday(&endFullTime,NULL);
   startt = startFullTime.tv_sec+(startFullTime.tv_usec/1000000.0);
@@ -782,6 +831,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   // massBuffer
   // filterBuffer
   // Release mass buffer and reallocate final daisy buffer
+  clReleaseMemObject(daisyBufferA);
   clReleaseMemObject(massBuffer);
   clReleaseMemObject(transBuffer);
   clReleaseMemObject(filterBuffer);
@@ -794,13 +844,20 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
 // Generates the offsets to points in the circular petal region
 // of sigma * 2 in petalsNo directions
-float* generatePetalOffsets(float sigma, int petalsNo){
+float* generatePetalOffsets(float sigma, int petalsNo, short int firstRegion){
+
+  if(firstRegion != 0 && firstRegion != 1) return NULL;
 
   float regionRadius = sigma * 2;
-  float * petalOffsets = (float*)malloc(sizeof(float) * petalsNo * 2);
+  float * petalOffsets = (float*)malloc(sizeof(float) * (petalsNo + firstRegion) * 2);
+
+  if(firstRegion){
+    petalOffsets[0] = 0;
+    petalOffsets[1] = 0;
+  }
 
   int i;
-  for(i = 0; i < petalsNo; i++){
+  for(i = firstRegion; i < petalsNo+firstRegion; i++){
     petalOffsets[i*2]   = regionRadius * sin(i * (M_PI / 4));
     petalOffsets[i*2+1] = regionRadius * cos(i * (M_PI / 4));
   }
@@ -825,6 +882,11 @@ float* generatePetalOffsets(float sigma, int petalsNo){
 // recovery;
 //    k = floor(pairedOffsets[currentPair * pairIngredients+2] / (float)TR_PAIRS_OFFSET_WIDTH);
 //    l = pairedOffsets[currentPair * pairIngredients+2] - k * TR_PAIRS_OFFSET_WIDTH - TR_PAIRS_OFFSET_WIDTH/2;
+//
+// Current pair ratios;
+// S=2.5: 812/1492 = 0.54
+// S=5  : 633/1415 = 0.44
+// S=7.5: 417/1631 = 0.25
 //
 int* generateTranspositionOffsets(int windowHeight, int windowWidth,
                                   float*  petalOffsets,
@@ -909,7 +971,7 @@ int* generateTranspositionOffsets(int windowHeight, int windowWidth,
       nextSourceY = allSources[j*2+2];
       nextSourceX = allSources[j*2+3];
 
-      if(i % petalsNo == 7){ // can't pair up last with first, the sets of values in the destination array are not continuous
+      if(i % petalsNo == petalsNo-1){ // can't pair up last with first, the sets of values in the destination array are not continuous
         if(thisSourceY != noSource)
           singlesLeftOver[j] = isLeftOver;
         continue;

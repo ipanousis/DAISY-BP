@@ -383,7 +383,7 @@ __kernel void transposeGradients(__global float * srcArray,
     const int dstRow = smoothSection * dstHeight + groupRow;
     const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
 
-    dstArray[dstRow * dstWidth + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+1) + localX];
+    dstArray[dstRow * dstWidth + dstCol] = 1 + smoothSection * 8 + localY;
 }
 
 #define TRANSD_BLOCK_WIDTH 512
@@ -454,7 +454,7 @@ __kernel void transposeDaisy(__global   float * srcArray,
 
   const int dstGroupOffset = (topLeftY * TRANSD_BLOCK_WIDTH + topLeftX) * GRADIENT_NUM * TOTAL_PETALS_NO;
 
-  const int petalRegion = (srcGlobalOffset / (srcWidth * GRADIENT_NUM)) / srcHeight;
+  const int petalStart = ((srcGlobalOffset / (srcWidth * GRADIENT_NUM)) / srcHeight) * REGION_PETALS_NO + (srcGlobalOffset > 0);
 
   const int offset = (halfWarpId < (transArrayLength % pairsPerHalfWarp) ? halfWarpId : (transArrayLength % pairsPerHalfWarp));
   for(int p = pairsPerHalfWarp * halfWarpId + offset; 
@@ -476,7 +476,7 @@ __kernel void transposeDaisy(__global   float * srcArray,
     else if(fromP2 != TRANSD_PAIRS_SINGLE_ONLY || (lx < 8)){
       dstArray[dstGroupOffset
                + (toOffsetY * TRANSD_BLOCK_WIDTH + toOffsetX) * GRADIENT_NUM * TOTAL_PETALS_NO
-               + (petalRegion * REGION_PETALS_NO + 1 + petalNo) * GRADIENT_NUM + lx] =
+               + (petalStart + petalNo) * GRADIENT_NUM + lx] =
 
         lclArray[((fromP1+intraHalfWarpOffset) / TRANSD_DATA_WIDTH) * (TRANSD_DATA_WIDTH * GRADIENT_NUM + lclArrayPadding) 
                + ((fromP1+intraHalfWarpOffset) % TRANSD_DATA_WIDTH) * GRADIENT_NUM + lx % 8];

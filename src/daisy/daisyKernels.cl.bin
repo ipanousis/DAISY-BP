@@ -4713,7 +4713,7 @@ BB8_12:
 )
 {
 	.reg .f32 	%f<3>;
-	.reg .s32 	%r<66>;
+	.reg .s32 	%r<64>;
 
 
 	ld.param.u32 	%r21, [transposeGradients_param_0];
@@ -4793,35 +4793,34 @@ BB8_12:
 	// inline asm
 	mov.u32 	%r42, %tid.x;
 	// inline asm
-	shr.u32 	%r47, %r42, 3;
 	// inline asm
 	mov.u32 	%r43, %tid.y;
 	// inline asm
-	shl.b32 	%r48, %r43, 2;
-	add.s32 	%r49, %r48, %r47;
-	ld.param.u32 	%r65, [transposeGradients_param_5];
-	mad.lo.s32 	%r50, %r4, %r65, %r5;
+	shl.b32 	%r47, %r43, 5;
+	ld.param.u32 	%r63, [transposeGradients_param_5];
+	mad.lo.s32 	%r48, %r4, %r63, %r5;
 	// inline asm
 	mov.u32 	%r44, %envreg0;
 	// inline asm
 	// inline asm
 	mov.u32 	%r45, %ctaid.x;
 	// inline asm
-	add.s32 	%r51, %r45, %r44;
-	shl.b32 	%r52, %r51, 8;
-	shl.b32 	%r53, %r49, 3;
-	mad.lo.s32 	%r54, %r46, 33, %r49;
-	shl.b32 	%r55, %r54, 2;
-	add.s32 	%r57, %r39, %r55;
-	ld.param.u32 	%r64, [transposeGradients_param_4];
-	mad.lo.s32 	%r58, %r50, %r64, %r46;
-	add.s32 	%r59, %r58, %r53;
-	add.s32 	%r60, %r59, %r52;
-	shl.b32 	%r61, %r60, 2;
-	ld.param.u32 	%r63, [transposeGradients_param_1];
-	add.s32 	%r62, %r63, %r61;
-	ld.shared.f32 	%f2, [%r57];
-	st.global.f32 	[%r62], %f2;
+	add.s32 	%r49, %r45, %r44;
+	shl.b32 	%r50, %r49, 8;
+	add.s32 	%r51, %r47, %r42;
+	shl.b32 	%r52, %r4, 3;
+	or.b32  	%r53, %r52, %r46;
+	add.s32 	%r54, %r53, 1;
+	cvt.rn.f32.s32 	%f2, %r54;
+	ld.param.u32 	%r62, [transposeGradients_param_4];
+	mad.lo.s32 	%r55, %r48, %r62, %r46;
+	and.b32  	%r56, %r51, 1073741816;
+	add.s32 	%r57, %r55, %r56;
+	add.s32 	%r58, %r57, %r50;
+	shl.b32 	%r59, %r58, 2;
+	ld.param.u32 	%r61, [transposeGradients_param_1];
+	add.s32 	%r60, %r61, %r59;
+	st.global.f32 	[%r60], %f2;
 	ret;
 }
 
@@ -4838,8 +4837,8 @@ BB8_12:
 )
 {
 	.reg .f32 	%f<13>;
-	.reg .pred 	%p<17>;
-	.reg .s32 	%r<265>;
+	.reg .pred 	%p<18>;
+	.reg .s32 	%r<266>;
 
 
 	ld.param.u32 	%r4, [transposeDaisy_param_3];
@@ -4896,8 +4895,8 @@ BB8_12:
 	add.s32 	%r17, %r4, %r51;
 	@%p9 bra 	BB10_2;
 
-	ld.param.u32 	%r263, [transposeDaisy_param_8];
-	add.s32 	%r60, %r263, 128;
+	ld.param.u32 	%r264, [transposeDaisy_param_8];
+	add.s32 	%r60, %r264, 128;
 	mad.lo.s32 	%r61, %r44, %r60, %r43;
 	mov.u32 	%r62, 0;
 	st.shared.u32 	[%r17], %r62;
@@ -4906,8 +4905,8 @@ BB8_12:
 	// inline asm
 	add.s32 	%r63, %r61, %r53;
 	shl.b32 	%r64, %r63, 2;
-	ld.param.u32 	%r254, [transposeDaisy_param_3];
-	add.s32 	%r65, %r254, %r64;
+	ld.param.u32 	%r255, [transposeDaisy_param_3];
+	add.s32 	%r65, %r255, %r64;
 	st.shared.u32 	[%r65], %r62;
 	// inline asm
 	mov.u32 	%r54, %ntid.x;
@@ -4915,14 +4914,14 @@ BB8_12:
 	shl.b32 	%r66, %r54, 1;
 	add.s32 	%r67, %r61, %r66;
 	shl.b32 	%r68, %r67, 2;
-	add.s32 	%r69, %r254, %r68;
+	add.s32 	%r69, %r255, %r68;
 	st.shared.u32 	[%r69], %r62;
 	// inline asm
 	mov.u32 	%r55, %ntid.x;
 	// inline asm
 	mad.lo.s32 	%r70, %r55, 3, %r61;
 	shl.b32 	%r71, %r70, 2;
-	add.s32 	%r72, %r254, %r71;
+	add.s32 	%r72, %r255, %r71;
 	st.shared.u32 	[%r72], %r62;
 	// inline asm
 	mov.u32 	%r56, %ntid.x;
@@ -4930,37 +4929,37 @@ BB8_12:
 	shl.b32 	%r73, %r56, 2;
 	add.s32 	%r74, %r61, %r73;
 	shl.b32 	%r75, %r74, 2;
-	add.s32 	%r76, %r254, %r75;
+	add.s32 	%r76, %r255, %r75;
 	st.shared.u32 	[%r76], %r62;
 	// inline asm
 	mov.u32 	%r57, %ntid.x;
 	// inline asm
 	mad.lo.s32 	%r77, %r57, 5, %r61;
 	shl.b32 	%r78, %r77, 2;
-	add.s32 	%r79, %r254, %r78;
+	add.s32 	%r79, %r255, %r78;
 	st.shared.u32 	[%r79], %r62;
 	// inline asm
 	mov.u32 	%r58, %ntid.x;
 	// inline asm
 	mad.lo.s32 	%r80, %r58, 6, %r61;
 	shl.b32 	%r81, %r80, 2;
-	add.s32 	%r82, %r254, %r81;
+	add.s32 	%r82, %r255, %r81;
 	st.shared.u32 	[%r82], %r62;
 	// inline asm
 	mov.u32 	%r59, %ntid.x;
 	// inline asm
 	mad.lo.s32 	%r83, %r59, 7, %r61;
 	shl.b32 	%r84, %r83, 2;
-	add.s32 	%r85, %r254, %r84;
+	add.s32 	%r85, %r255, %r84;
 	st.shared.u32 	[%r85], %r62;
 	bra.uni 	BB10_3;
 
 BB10_2:
-	ld.param.u32 	%r256, [transposeDaisy_param_4];
-	mul.lo.s32 	%r110, %r256, %r13;
+	ld.param.u32 	%r257, [transposeDaisy_param_4];
+	mul.lo.s32 	%r110, %r257, %r13;
 	shl.b32 	%r111, %r110, 3;
-	ld.param.u32 	%r258, [transposeDaisy_param_6];
-	add.s32 	%r112, %r43, %r258;
+	ld.param.u32 	%r259, [transposeDaisy_param_6];
+	add.s32 	%r112, %r43, %r259;
 	add.s32 	%r113, %r112, %r111;
 	add.s32 	%r114, %r35, %r38;
 	add.s32 	%r115, %r114, %r11;
@@ -4976,8 +4975,8 @@ BB10_2:
 	shl.b32 	%r119, %r118, 3;
 	add.s32 	%r120, %r113, %r119;
 	shl.b32 	%r121, %r120, 2;
-	ld.param.u32 	%r249, [transposeDaisy_param_0];
-	add.s32 	%r122, %r249, %r121;
+	ld.param.u32 	%r250, [transposeDaisy_param_0];
+	add.s32 	%r122, %r250, %r121;
 	ld.global.f32 	%f1, [%r122];
 	st.shared.f32 	[%r17], %f1;
 	// inline asm
@@ -4991,15 +4990,15 @@ BB10_2:
 	or.b32  	%r125, %r124, 1;
 	mad.lo.s32 	%r126, %r125, %r90, %r113;
 	shl.b32 	%r127, %r126, 2;
-	add.s32 	%r128, %r249, %r127;
+	add.s32 	%r128, %r250, %r127;
 	ld.global.f32 	%f2, [%r128];
 	// inline asm
 	mov.u32 	%r91, %ntid.x;
 	// inline asm
 	add.s32 	%r129, %r16, %r91;
 	shl.b32 	%r130, %r129, 2;
-	ld.param.u32 	%r253, [transposeDaisy_param_3];
-	add.s32 	%r131, %r253, %r130;
+	ld.param.u32 	%r254, [transposeDaisy_param_3];
+	add.s32 	%r131, %r254, %r130;
 	st.shared.f32 	[%r131], %f2;
 	// inline asm
 	mov.u32 	%r92, %ntid.x;
@@ -5012,7 +5011,7 @@ BB10_2:
 	or.b32  	%r134, %r133, 2;
 	mad.lo.s32 	%r135, %r134, %r93, %r113;
 	shl.b32 	%r136, %r135, 2;
-	add.s32 	%r137, %r249, %r136;
+	add.s32 	%r137, %r250, %r136;
 	ld.global.f32 	%f3, [%r137];
 	// inline asm
 	mov.u32 	%r94, %ntid.x;
@@ -5020,7 +5019,7 @@ BB10_2:
 	shl.b32 	%r138, %r94, 1;
 	add.s32 	%r139, %r16, %r138;
 	shl.b32 	%r140, %r139, 2;
-	add.s32 	%r141, %r253, %r140;
+	add.s32 	%r141, %r254, %r140;
 	st.shared.f32 	[%r141], %f3;
 	// inline asm
 	mov.u32 	%r95, %ntid.x;
@@ -5033,14 +5032,14 @@ BB10_2:
 	or.b32  	%r144, %r143, 3;
 	mad.lo.s32 	%r145, %r144, %r96, %r113;
 	shl.b32 	%r146, %r145, 2;
-	add.s32 	%r147, %r249, %r146;
+	add.s32 	%r147, %r250, %r146;
 	ld.global.f32 	%f4, [%r147];
 	// inline asm
 	mov.u32 	%r97, %ntid.x;
 	// inline asm
 	mad.lo.s32 	%r148, %r97, 3, %r16;
 	shl.b32 	%r149, %r148, 2;
-	add.s32 	%r150, %r253, %r149;
+	add.s32 	%r150, %r254, %r149;
 	st.shared.f32 	[%r150], %f4;
 	// inline asm
 	mov.u32 	%r98, %ntid.x;
@@ -5053,7 +5052,7 @@ BB10_2:
 	or.b32  	%r153, %r152, 4;
 	mad.lo.s32 	%r154, %r153, %r99, %r113;
 	shl.b32 	%r155, %r154, 2;
-	add.s32 	%r156, %r249, %r155;
+	add.s32 	%r156, %r250, %r155;
 	ld.global.f32 	%f5, [%r156];
 	// inline asm
 	mov.u32 	%r100, %ntid.x;
@@ -5061,7 +5060,7 @@ BB10_2:
 	shl.b32 	%r157, %r100, 2;
 	add.s32 	%r158, %r16, %r157;
 	shl.b32 	%r159, %r158, 2;
-	add.s32 	%r160, %r253, %r159;
+	add.s32 	%r160, %r254, %r159;
 	st.shared.f32 	[%r160], %f5;
 	// inline asm
 	mov.u32 	%r101, %ntid.x;
@@ -5074,14 +5073,14 @@ BB10_2:
 	or.b32  	%r163, %r162, 5;
 	mad.lo.s32 	%r164, %r163, %r102, %r113;
 	shl.b32 	%r165, %r164, 2;
-	add.s32 	%r166, %r249, %r165;
+	add.s32 	%r166, %r250, %r165;
 	ld.global.f32 	%f6, [%r166];
 	// inline asm
 	mov.u32 	%r103, %ntid.x;
 	// inline asm
 	mad.lo.s32 	%r167, %r103, 5, %r16;
 	shl.b32 	%r168, %r167, 2;
-	add.s32 	%r169, %r253, %r168;
+	add.s32 	%r169, %r254, %r168;
 	st.shared.f32 	[%r169], %f6;
 	// inline asm
 	mov.u32 	%r104, %ntid.x;
@@ -5094,14 +5093,14 @@ BB10_2:
 	or.b32  	%r172, %r171, 6;
 	mad.lo.s32 	%r173, %r172, %r105, %r113;
 	shl.b32 	%r174, %r173, 2;
-	add.s32 	%r175, %r249, %r174;
+	add.s32 	%r175, %r250, %r174;
 	ld.global.f32 	%f7, [%r175];
 	// inline asm
 	mov.u32 	%r106, %ntid.x;
 	// inline asm
 	mad.lo.s32 	%r176, %r106, 6, %r16;
 	shl.b32 	%r177, %r176, 2;
-	add.s32 	%r178, %r253, %r177;
+	add.s32 	%r178, %r254, %r177;
 	st.shared.f32 	[%r178], %f7;
 	// inline asm
 	mov.u32 	%r107, %ntid.x;
@@ -5114,14 +5113,14 @@ BB10_2:
 	or.b32  	%r181, %r180, 7;
 	mad.lo.s32 	%r182, %r181, %r108, %r113;
 	shl.b32 	%r183, %r182, 2;
-	add.s32 	%r184, %r249, %r183;
+	add.s32 	%r184, %r250, %r183;
 	ld.global.f32 	%f8, [%r184];
 	// inline asm
 	mov.u32 	%r109, %ntid.x;
 	// inline asm
 	mad.lo.s32 	%r185, %r109, 7, %r16;
 	shl.b32 	%r186, %r185, 2;
-	add.s32 	%r187, %r253, %r186;
+	add.s32 	%r187, %r254, %r186;
 	st.shared.f32 	[%r187], %f8;
 
 BB10_3:
@@ -5134,8 +5133,8 @@ BB10_3:
 	// inline asm
 	mul.lo.s32 	%r197, %r189, %r188;
 	shr.u32 	%r198, %r197, 4;
-	ld.param.u32 	%r261, [transposeDaisy_param_7];
-	div.u32 	%r199, %r261, %r198;
+	ld.param.u32 	%r262, [transposeDaisy_param_7];
+	div.u32 	%r199, %r262, %r198;
 	// inline asm
 	mov.u32 	%r190, %ntid.y;
 	// inline asm
@@ -5166,101 +5165,103 @@ BB10_3:
 	// inline asm
 	add.s32 	%r206, %r196, %r195;
 	shl.b32 	%r19, %r206, 4;
-	ld.param.u32 	%r255, [transposeDaisy_param_4];
-	shl.b32 	%r207, %r255, 3;
-	ld.param.u32 	%r259, [transposeDaisy_param_6];
-	div.s32 	%r208, %r259, %r207;
-	ld.param.u32 	%r257, [transposeDaisy_param_5];
-	div.s32 	%r209, %r208, %r257;
-	rem.s32 	%r210, %r261, %r199;
-	setp.lt.s32 	%p10, %r203, %r210;
-	min.s32 	%r211, %r203, %r210;
-	mad.lo.s32 	%r264, %r203, %r199, %r211;
-	add.s32 	%r212, %r201, -1;
-	setp.eq.s32 	%p1, %r203, %r212;
-	setp.gt.s32 	%p11, %r43, 7;
-	selp.b32 	%r21, -1, 0, %p11;
+	ld.param.u32 	%r256, [transposeDaisy_param_4];
+	shl.b32 	%r207, %r256, 3;
+	ld.param.u32 	%r260, [transposeDaisy_param_6];
+	div.s32 	%r208, %r260, %r207;
+	ld.param.u32 	%r258, [transposeDaisy_param_5];
+	div.s32 	%r209, %r208, %r258;
+	shl.b32 	%r210, %r209, 3;
+	setp.gt.s32 	%p10, %r260, 0;
+	selp.u32 	%r211, 1, 0, %p10;
+	rem.s32 	%r212, %r262, %r199;
+	setp.lt.s32 	%p11, %r203, %r212;
+	min.s32 	%r213, %r203, %r212;
+	mad.lo.s32 	%r265, %r203, %r199, %r213;
+	add.s32 	%r214, %r201, -1;
+	setp.eq.s32 	%p1, %r203, %r214;
+	setp.gt.s32 	%p12, %r43, 7;
+	selp.b32 	%r21, -1, 0, %p12;
 	setp.lt.s32 	%p2, %r43, 8;
-	ld.param.u32 	%r262, [transposeDaisy_param_8];
-	add.s32 	%r22, %r262, 128;
-	shr.s32 	%r213, %r43, 31;
-	shr.u32 	%r214, %r213, 29;
-	add.s32 	%r215, %r43, %r214;
-	and.b32  	%r216, %r215, -8;
-	sub.s32 	%r23, %r43, %r216;
-	shl.b32 	%r217, %r209, 3;
-	or.b32  	%r24, %r217, 1;
-	add.s32 	%r218, %r203, 1;
-	mad.lo.s32 	%r219, %r218, %r199, %r211;
-	selp.u32 	%r220, 1, 0, %p10;
-	add.s32 	%r25, %r219, %r220;
+	ld.param.u32 	%r263, [transposeDaisy_param_8];
+	add.s32 	%r22, %r263, 128;
+	shr.s32 	%r215, %r43, 31;
+	shr.u32 	%r216, %r215, 29;
+	add.s32 	%r217, %r43, %r216;
+	and.b32  	%r218, %r217, -8;
+	sub.s32 	%r23, %r43, %r218;
+	or.b32  	%r24, %r210, %r211;
+	add.s32 	%r219, %r203, 1;
+	mad.lo.s32 	%r220, %r219, %r199, %r213;
+	selp.u32 	%r221, 1, 0, %p11;
+	add.s32 	%r25, %r220, %r221;
 
 BB10_4:
-	ld.param.u32 	%r260, [transposeDaisy_param_7];
-	selp.b32 	%r221, %r260, %r25, %p1;
-	setp.lt.s32 	%p12, %r264, %r221;
-	@%p12 bra 	BB10_6;
+	ld.param.u32 	%r261, [transposeDaisy_param_7];
+	selp.b32 	%r222, %r261, %r25, %p1;
+	setp.lt.s32 	%p13, %r265, %r222;
+	@%p13 bra 	BB10_6;
 
 	ret;
 
 BB10_6:
-	shl.b32 	%r222, %r264, 4;
-	ld.param.u32 	%r251, [transposeDaisy_param_2];
-	add.s32 	%r223, %r251, %r222;
-	ld.const.u32 	%r27, [%r223];
-	ld.const.u32 	%r28, [%r223+4];
-	ld.const.u32 	%r29, [%r223+12];
-	ld.const.u32 	%r224, [%r223+8];
-	cvt.rn.f32.s32 	%f11, %r224;
+	shl.b32 	%r223, %r265, 4;
+	ld.param.u32 	%r252, [transposeDaisy_param_2];
+	add.s32 	%r224, %r252, %r223;
+	ld.const.u32 	%r27, [%r224];
+	ld.const.u32 	%r28, [%r224+4];
+	ld.const.u32 	%r29, [%r224+12];
+	ld.const.u32 	%r225, [%r224+8];
+	cvt.rn.f32.s32 	%f11, %r225;
 	div.full.f32 	%f10, %f11, 0f447A0000;
 	// inline asm
 	cvt.rmi.f32.f32 	%f9, %f10;
 	// inline asm
-	cvt.rzi.s32.f32 	%r225, %f9;
-	mul.lo.s32 	%r226, %r225, 1000;
-	sub.s32 	%r30, %r224, %r226;
-	sub.s32 	%r227, %r28, %r27;
-	and.b32  	%r31, %r227, %r21;
-	add.s32 	%r32, %r225, %r18;
-	setp.gt.u32 	%p13, %r32, 511;
-	@%p13 bra 	BB10_10;
-
-	add.s32 	%r228, %r30, %r19;
-	add.s32 	%r33, %r228, -516;
-	setp.gt.u32 	%p14, %r33, 511;
+	cvt.rzi.s32.f32 	%r226, %f9;
+	mul.lo.s32 	%r227, %r226, 1000;
+	sub.s32 	%r30, %r225, %r227;
+	sub.s32 	%r228, %r28, %r27;
+	and.b32  	%r31, %r228, %r21;
+	add.s32 	%r32, %r226, %r18;
+	setp.gt.u32 	%p14, %r32, 511;
 	@%p14 bra 	BB10_10;
 
-	setp.ne.s32 	%p15, %r28, -999;
-	or.pred  	%p16, %p15, %p2;
-	@!%p16 bra 	BB10_10;
+	add.s32 	%r229, %r30, %r19;
+	add.s32 	%r33, %r229, -516;
+	setp.gt.u32 	%p15, %r33, 511;
+	@%p15 bra 	BB10_10;
 
-	add.s32 	%r229, %r31, %r27;
-	shr.s32 	%r230, %r229, 31;
-	shr.u32 	%r231, %r230, 28;
-	add.s32 	%r232, %r229, %r231;
-	shr.s32 	%r233, %r232, 4;
-	and.b32  	%r234, %r232, 134217712;
-	sub.s32 	%r235, %r229, %r234;
-	shl.b32 	%r236, %r235, 3;
-	mad.lo.s32 	%r237, %r233, %r22, %r23;
-	add.s32 	%r238, %r237, %r236;
-	shl.b32 	%r239, %r238, 2;
-	ld.param.u32 	%r252, [transposeDaisy_param_3];
-	add.s32 	%r240, %r252, %r239;
-	shl.b32 	%r241, %r32, 9;
-	add.s32 	%r242, %r33, %r241;
-	add.s32 	%r243, %r24, %r29;
-	shl.b32 	%r244, %r243, 3;
-	add.s32 	%r245, %r244, %r43;
-	mad.lo.s32 	%r246, %r242, 200, %r245;
-	shl.b32 	%r247, %r246, 2;
-	ld.param.u32 	%r250, [transposeDaisy_param_1];
-	add.s32 	%r248, %r250, %r247;
-	ld.shared.f32 	%f12, [%r240];
-	st.global.f32 	[%r248], %f12;
+	setp.ne.s32 	%p16, %r28, -999;
+	or.pred  	%p17, %p16, %p2;
+	@!%p17 bra 	BB10_10;
+
+	add.s32 	%r230, %r31, %r27;
+	shr.s32 	%r231, %r230, 31;
+	shr.u32 	%r232, %r231, 28;
+	add.s32 	%r233, %r230, %r232;
+	shr.s32 	%r234, %r233, 4;
+	and.b32  	%r235, %r233, 134217712;
+	sub.s32 	%r236, %r230, %r235;
+	shl.b32 	%r237, %r236, 3;
+	mad.lo.s32 	%r238, %r234, %r22, %r23;
+	add.s32 	%r239, %r238, %r237;
+	shl.b32 	%r240, %r239, 2;
+	ld.param.u32 	%r253, [transposeDaisy_param_3];
+	add.s32 	%r241, %r253, %r240;
+	shl.b32 	%r242, %r32, 9;
+	add.s32 	%r243, %r33, %r242;
+	add.s32 	%r244, %r24, %r29;
+	shl.b32 	%r245, %r244, 3;
+	add.s32 	%r246, %r245, %r43;
+	mad.lo.s32 	%r247, %r243, 200, %r246;
+	shl.b32 	%r248, %r247, 2;
+	ld.param.u32 	%r251, [transposeDaisy_param_1];
+	add.s32 	%r249, %r251, %r248;
+	ld.shared.f32 	%f12, [%r241];
+	st.global.f32 	[%r249], %f12;
 
 BB10_10:
-	add.s32 	%r264, %r264, 1;
+	add.s32 	%r265, %r265, 1;
 	bra.uni 	BB10_4;
 }
 

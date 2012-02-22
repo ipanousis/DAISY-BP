@@ -38,6 +38,7 @@ typedef struct ocl_daisy_programs_tag{
 #define DAISY_PARAMS
 typedef struct daisy_params_tag{
   unsigned char * array;
+  float * descriptors;
   int width;
   int height;
   int petalsNo;
@@ -56,6 +57,3 @@ int initOcl(daisy_params *, ocl_constructs *);
 
 int oclDaisy(daisy_params *, ocl_constructs *);
 
-float * generatePetalOffsets(float, int);
-
-int * generateTranspositionOffsets(int, int, float*, int, int*, int*);
