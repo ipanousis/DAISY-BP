@@ -47,6 +47,7 @@ typedef struct daisy_params_tag{
   int smoothingsNo;
   int paddedWidth;
   int paddedHeight;
+  int descriptorLength;
   ocl_daisy_programs oclPrograms;
 } daisy_params;
 #endif

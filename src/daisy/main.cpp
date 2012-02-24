@@ -53,6 +53,13 @@ int main( int argc, char **argv  )
 
   //printf("Paired Offsets: %d\n",pairedOffsetsLength);
   //printf("Actual Pairs: %d\n",actualPairs);
+
+  //kutility::save(filename, m_dense_descriptors, m_h*m_w, m_descriptor_size );
+  string binaryfile = filename;
+  binaryfile += ".bdaisy";
+//   kutility::save_binary(filename, m_dense_descriptors, m_h*m_w, m_descriptor_size, 1, kutility::TYPE_FLOAT );
+  kutility::save_binary(binaryfile, daisy->descriptors, height * width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+
   gettimeofday(&endTime,NULL);
 
   free(daisy->array);

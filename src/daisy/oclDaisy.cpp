@@ -26,6 +26,7 @@ daisy_params * newDaisyParams(unsigned char* array, int height, int width,
   params->smoothingsNo = smoothingsNo;
   params->totalPetalsNo = petalsNo * smoothingsNo + 1;
   params->descriptors = NULL;
+  params->descriptorLength = params->totalPetalsNo * gradientsNo;
 
   return params;
 }
@@ -207,7 +208,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   oclError("oclDaisy","clEnqueueWriteBuffer (1)",error);
 
-  short int DEBUG_ALL = 0;
+  short int DEBUG_ALL = 1;
 
   float * inputArray = (float*)malloc(sizeof(float) * paddedWidth * paddedHeight * 8);
 
@@ -227,7 +228,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   }
 
   error = clEnqueueWriteBuffer(daisyCl->queue, massBuffer, CL_TRUE,
-                               0, paddedWidth * paddedHeight * sizeof(float),
+                               paddedWidth * paddedHeight * 8 * sizeof(float), 
+                               paddedWidth * paddedHeight * sizeof(float),
                                (void*)inputArray,
                                0, NULL, NULL);
 
@@ -258,6 +260,23 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   error = clFinish(daisyCl->queue);
   oclError("oclDaisy","clFinish (1)",error);
 
+  if(DEBUG_ALL){
+    // checked verified
+    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
+                        paddedWidth * paddedHeight * sizeof(float), 
+                        paddedWidth * paddedHeight * sizeof(float), testArray,
+                        0, NULL, NULL);
+
+    printf("\nDenoising Input x: %f",inputArray[0]);
+    for(k = 1; k < 25; k++)
+      printf(", %f", inputArray[k]);
+    printf("\n");
+    printf("\nDenoising Output x: %f",testArray[0]);
+    for(k = 1; k < 25; k++)
+      printf(", %f", testArray[k]);
+    printf("\n");
+  }
+
   // convolve Y - A.1 to B.0
   size_t convWorkerSize7y[2] = {daisy->paddedWidth,daisy->paddedHeight / 4};
   size_t convGroupSize7y[2] = {16,8};
@@ -283,22 +302,18 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   printf("\nSmooth 7: %.4fs (%.4f MPixel/sec)\n",diffp,(paddedHeight*paddedWidth)/(1000000.0f*diffp));
 
   if(DEBUG_ALL){
-    
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
-                        paddedWidth * paddedHeight * sizeof(float), paddedWidth * paddedHeight * sizeof(float), testArray,
-                        0, NULL, NULL);
-
+    // checked verified
     error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
                         paddedWidth * paddedHeight * 8 * sizeof(float), paddedWidth * paddedHeight * sizeof(float), inputArray,
                         0, NULL, NULL);
 
-    printf("\nDenoising Input: %f",testArray[(daisy->height-25)*paddedWidth]);
+    printf("\nDenoising Input y: %f",testArray[159+58*paddedWidth]);
     for(k = 1; k < 25; k++)
-      printf(", %f", testArray[(daisy->height-25+k)*paddedWidth]);
+      printf(", %f", testArray[(58+k)*paddedWidth+159]);
     printf("\n");
-    printf("\nDenoising Output: %f",inputArray[(daisy->height-25)*paddedWidth]);
+    printf("\nDenoising Output y: %f",inputArray[159+58*paddedWidth]);
     for(k = 1; k < 25; k++)
-      printf(", %f", inputArray[(daisy->height-25+k)*paddedWidth]);
+      printf(", %f", inputArray[(58+k)*paddedWidth+159]);
     printf("\n");
   }
 
@@ -323,12 +338,12 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
                         0, paddedWidth * paddedHeight * sizeof(float), testArray,
                         0, NULL, NULL);
     clFinish(daisyCl->queue);
-    printf("\nBefore Gradient: %f",inputArray[0]);
+    printf("\nBefore Gradient: %f",inputArray[512*paddedWidth+128]);
     for(k = 1; k < 25; k++)
-      printf(", %f", inputArray[k]);
-    printf("\nAfter Gradient (X): %f",testArray[0]);
+      printf(", %f", inputArray[512*paddedWidth+128+k]);
+    printf("\nAfter Gradient (X,X+22.5,X+45,Y): %f",testArray[512*paddedWidth+128]);
     for(k = 1; k < 25; k++)
-      printf(", %f", testArray[k]);
+      printf(", %f", testArray[512*paddedWidth+128+k]);
     printf("\n");
   }
     
@@ -649,16 +664,20 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   }
 
   // B) final transposition
-  //int daisyBlockWidth = daisy->paddedWidth;
-  //int daisyBlockHeight = TR_BLOCK_SIZE / daisyBlockWidth;
-  int daisyBlockWidth = 512;
-  int daisyBlockHeight = 512;
+  int daisyBlockWidth = daisy->paddedWidth;
+  int daisyBlockHeight = TR_BLOCK_SIZE / daisyBlockWidth;
 
   printf("\nBlock Size calculated (HxW): %dx%d\n",daisyBlockHeight,daisyBlockWidth);
 
   unsigned long int daisySectionSize = daisyBlockWidth * daisyBlockHeight * daisy->totalPetalsNo * daisy->gradientsNo * sizeof(float);
 
   printf("\nAllocated %ld bytes on GPU for daisy section buffer (%ldMB)\n",daisySectionSize,daisySectionSize/(1024*1024));
+
+  unsigned long int daisyDescriptorSize = daisy->paddedWidth * daisy->paddedHeight * daisy->totalPetalsNo * daisy->gradientsNo * sizeof(float);
+
+  printf("\nAllocated %ld bytes on host for daisy descriptor array (%ldMB)\n",daisyDescriptorSize,daisyDescriptorSize/(1024*1024));
+
+  daisy->descriptors = (float*)malloc(daisyDescriptorSize);
 
   cl_mem daisyBufferA = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY,
                                        daisySectionSize,(void*)NULL, &error);
@@ -810,6 +829,19 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
       // END OF VERIFICATION CODE
       //
     }
+
+    int descriptorsOffset = (sectionY * daisyBlockHeight * daisyBlockWidth + 
+                             sectionX * daisyBlockWidth) * daisy->totalPetalsNo * daisy->gradientsNo;
+
+    error = clEnqueueReadBuffer(daisyCl->queue, daisyBufferA, CL_TRUE,
+                                0, daisySectionSize, daisy->descriptors + descriptorsOffset,
+                                0, NULL, NULL);
+
+    oclError("oclDaisy","clEnqueueReadBuffer (block)",error);
+
+    error = clFinish(daisyCl->queue);
+
+    oclError("oclDaisy","clFinish (block read)",error);
   }
 
   gettimeofday(&endParaTime,NULL); // including verification currently
