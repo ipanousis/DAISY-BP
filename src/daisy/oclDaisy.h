@@ -4,6 +4,11 @@
 #include "ocl/cachedProgram.h"
 #include "ocl/cachedConstructs.h"
 
+#include "kutility/math.h"
+
+#define min(a,b) (a > b ? b : a)
+#define max(a,b) (a > b ? a : b)
+
 #ifndef OCL_DAISY_PROGRAMS
 #define OCL_DAISY_PROGRAMS
 typedef struct ocl_daisy_programs_tag{

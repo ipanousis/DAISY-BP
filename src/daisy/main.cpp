@@ -58,7 +58,7 @@ int main( int argc, char **argv  )
   string binaryfile = filename;
   binaryfile += ".bdaisy";
 //   kutility::save_binary(filename, m_dense_descriptors, m_h*m_w, m_descriptor_size, 1, kutility::TYPE_FLOAT );
-  kutility::save_binary(binaryfile, daisy->descriptors, height * width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+  kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
 
   gettimeofday(&endTime,NULL);
 

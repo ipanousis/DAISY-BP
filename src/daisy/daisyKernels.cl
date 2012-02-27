@@ -54,9 +54,9 @@ __kernel void convolve_y7(__global   float * massArray,
   for(int i = 1; i < CONVY_WORKER_STEPS+1; i++)
     lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = massArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
 
-  lclArray[lx][ly] = (srcOffsetY % pddHeight >= 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
+  lclArray[lx][ly] = (srcOffsetY >= 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
 
-  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? massArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
+  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = (srcOffsetY + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? massArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -89,8 +89,8 @@ __kernel void gradient_8all(__global float * massArray,
   float8 gradients;
   const float8 angles = (float8)(0.0f, M_PI / 4, M_PI / 2, 3 * (M_PI / 4), M_PI,
                                   5 * (M_PI / 4), 3 * (M_PI / 2), 7 * (M_PI / 4));
-  n.x = (n.x-n.z) * 0.5;
-  n.y = (n.y-n.w) * 0.5;
+  n.x = (n.z-n.x) * 0.5;
+  n.y = (n.w-n.y) * 0.5;
 
   gradients.s0 = fmax(cos(angles.s0) * n.x + 
                       sin(angles.s0) * n.y, 0.0);
@@ -180,7 +180,7 @@ __kernel void convolve_y11(__global   float * massArray,
   for(int i = 1; i < CONVY_WORKER_STEPS+1; i++)
     lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = massArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
 
-  lclArray[lx][ly] = (srcOffsetY % pddHeight >= 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
+  lclArray[lx][ly] = (get_group_id(1) % ((pddHeight / CONVY_WORKER_STEPS) / get_local_size(1)) ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
 
   lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? massArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
 
@@ -199,7 +199,7 @@ __kernel void convolve_y11(__global   float * massArray,
   }
 }
 
-#define CONVX_WORKER_STEPS 8
+//#define CONVX_WORKER_STEPS 8
 
 __kernel void convolve_x23(__global   float * massArray,
                            __constant float * fltArray,
@@ -255,7 +255,7 @@ __kernel void convolve_y23(__global   float * massArray,
   for(int i = 1; i < CONVY_WORKER_STEPS+1; i++)
     lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = massArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
 
-  lclArray[lx][ly] = (srcOffsetY % pddHeight >= 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
+  lclArray[lx][ly] = (get_group_id(1) % ((pddHeight / CONVY_WORKER_STEPS) / get_local_size(1)) > 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
 
   lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? massArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
 
@@ -274,7 +274,7 @@ __kernel void convolve_y23(__global   float * massArray,
   }
 }
 
-#define CONVX_WORKER_STEPS 8
+//#define CONVX_WORKER_STEPS 8
 
 __kernel void convolve_x29(__global   float * massArray,
                            __constant float * fltArray,
@@ -329,7 +329,7 @@ __kernel void convolve_y29(__global   float * massArray,
   for(int i = 1; i < CONVY_WORKER_STEPS+1; i++)
     lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = massArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
 
-  lclArray[lx][ly] = (srcOffsetY % pddHeight >= 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
+  lclArray[lx][ly] = (get_group_id(1) % ((pddHeight / CONVY_WORKER_STEPS) / get_local_size(1)) > 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
 
   lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? massArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
 
@@ -357,9 +357,7 @@ __kernel void convolve_y29(__global   float * massArray,
 __kernel void transposeGradients(__global float * srcArray,
                                  __global float * dstArray,
                                  const    int     srcWidth,
-                                 const    int     srcHeight,
-                                 const    int     dstWidth,
-                                 const    int     dstHeight)
+                                 const    int     srcHeight)
 {
 
     const int smoothSectionHeight = srcHeight * GRADIENT_NUM;
@@ -371,19 +369,31 @@ __kernel void transposeGradients(__global float * srcArray,
 
     const int srcIndex = (smoothSection * smoothSectionHeight + groupRowGradientSection * srcHeight + groupRow) * srcWidth + get_global_id(0);
 
-    __local float lclArray[(TRANS_GROUP_SIZE_X+1) * TRANS_GROUP_SIZE_Y];
+    __local float lclArray[(TRANS_GROUP_SIZE_X+2) * TRANS_GROUP_SIZE_Y];
 
-    lclArray[get_local_id(1) * (TRANS_GROUP_SIZE_X+1) + get_local_id(0)] = srcArray[srcIndex];
+    lclArray[get_local_id(1) * (TRANS_GROUP_SIZE_X+2) + get_local_id(0)] = srcArray[srcIndex];
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
     const int localY = get_local_id(0) % TRANS_GROUP_SIZE_Y;
     const int localX = get_local_id(0) / TRANS_GROUP_SIZE_Y + get_local_id(1) * (TRANS_GROUP_SIZE_X / TRANS_GROUP_SIZE_Y);
 
-    const int dstRow = smoothSection * dstHeight + groupRow;
+    //
+    // Normalisation piggy-backing along with the transposition
+    //
+    float l2normSum = .0f;
+    for(int i = 0; i < GRADIENT_NUM; i++){
+      const float g = lclArray[((localY+i) % GRADIENT_NUM) * (TRANS_GROUP_SIZE_X+2) + localX];
+      l2normSum += g*g;
+    }
+    l2normSum = (l2normSum == 0.0 ? 1 : 1 / sqrt(l2normSum));
+    //
+    //
+
+    const int dstRow = smoothSection * srcHeight + groupRow;
     const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
 
-    dstArray[dstRow * dstWidth + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+1) + localX];
+    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX] * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
 }
 
 //#define TRANSD_BLOCK_WIDTH 512
@@ -418,11 +428,11 @@ __kernel void transposeDaisy(__global   float * srcArray,
 
   // coalesced read (srcGlobalOffset + xid,yid) + padded write to lclArray
   //const int stepsPerWorker = (srcWidth * GRADIENT_NUM) / get_global_size(0); // => globalSizeX must divide 512 (16,32,64,128,256)
-  const int stepsPerWorker = 8;
 
   // should be no divergence, whole workgroups take the same path because; 
   // srcWidth and srcHeight must be multiples of TRANSD_DATA_WIDTH = GROUP_SIZE_X = GROUP_SIZE_Y = 16
   if(gx < 0 || gx >= srcWidth || gy < 0 || gy >= srcHeight){
+    const int stepsPerWorker = 8;
 
     for(int i = 0; i < stepsPerWorker; i++){
       lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENT_NUM + lclArrayPadding)      // local Y
@@ -431,6 +441,7 @@ __kernel void transposeDaisy(__global   float * srcArray,
     }
   }
   else{
+    const int stepsPerWorker = 8;
 
     for(int i = 0; i < stepsPerWorker; i++){
       lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENT_NUM + lclArrayPadding)        // local Y
