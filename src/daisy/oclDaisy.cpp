@@ -1,4 +1,5 @@
 #include "oclDaisy.h"
+#include <omp.h>
 #include <sys/time.h>
 
 float * generatePetalOffsets(float, int, short int);
@@ -60,8 +61,7 @@ int initOcl(daisy_params * daisy, ocl_constructs * daisyCl){
   }
 
   // Pass preprocessor build options
-  char options[128];
-  options[0] = '\0';
+  const char options[128] = "-cl-mad-enable";
   //sprintf(options, "-DFILTER_SIZE=%d -DARRAY_HEIGHT=%d -DARRAY_WIDTH=%d", 7, daisy->height, daisy->width);
   //const char * opts = options;
 
@@ -167,10 +167,13 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   printf("massBuffer size = %ld (%ldMB)\n", memorySize, memorySize / (1024 * 1024));
   printf("largestKernelSize = %d, paddedWidth = %d, paddedHeight = %d\n",largestKernelSize, paddedWidth, paddedHeight);
 
+  int filter5Size = 5;
+  float * filter5 = (float*)malloc(sizeof(float)*filter5Size);
+  kutility::gaussian_1d(filter5,filter5Size,0.5,0);
   int filter7Size = 7;
-  float filter7[7] = {0.036633,0.11128,0.21675,
+  /*float filter7[7] = {0.036633,0.11128,0.21675,
                       0.27068,
-                      0.21675,0.11128,0.036633};
+                      0.21675,0.11128,0.036633};*/
   int filter11Size = 11;
   float filter11[11] = {0.007024633,0.02381049,0.06153227,0.1212349,0.1821137,
                         0.2085680,
@@ -194,7 +197,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
                                        (void*)NULL, &error);
 
   clEnqueueWriteBuffer(daisyCl->queue, filterBuffer, CL_FALSE,
-                       filterOffsets[0] * sizeof(float), filter7Size * sizeof(float), (void*)filter7,
+                       filterOffsets[0] * sizeof(float), filter5Size * sizeof(float), (void*)filter5,
                        0, NULL, NULL);
   clEnqueueWriteBuffer(daisyCl->queue, filterBuffer, CL_FALSE,
                        filterOffsets[1] * sizeof(float), filter11Size * sizeof(float), (void*)filter11,
@@ -239,6 +242,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   gettimeofday(&startFullTime,NULL);
   gettimeofday(&startParaTime,NULL);
+
+  oclError("oclDaisy","clEnqueueMapBuffer (pinned host)",error);
 
   // smooth with kernel size 7 (achieve sigma 1.6 from 0.5)
   size_t convWorkerSize7x[2] = {daisy->paddedWidth / 4, daisy->paddedHeight};
@@ -662,6 +667,11 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
   }
 
   // B) final transposition
+
+  struct timeval startDaisyTime, endDaisyTime, startTi, endTi;
+
+  gettimeofday(&startDaisyTime,NULL);
+
   int daisyBlockWidth = daisy->paddedWidth;
   int daisyBlockHeight = min(TR_BLOCK_SIZE, daisy->paddedWidth * daisy->paddedHeight) / daisyBlockWidth;
 
@@ -669,20 +679,39 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
   unsigned long int daisySectionSize = daisyBlockWidth * daisyBlockHeight * daisy->totalPetalsNo * daisy->gradientsNo * sizeof(float);
 
+  cl_mem hostPinnedDaisyDescriptors = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, 
+                                                     daisySectionSize, NULL, &error);
+
   printf("\nAllocated %ld bytes on GPU for daisy section buffer (%ldMB)\n",daisySectionSize,daisySectionSize/(1024*1024));
 
   unsigned long int daisyDescriptorSize = daisy->paddedWidth * daisy->paddedHeight * daisy->totalPetalsNo * daisy->gradientsNo * sizeof(float);
 
   printf("\nAllocated %ld bytes on host for daisy descriptor array (%ldMB)\n",daisyDescriptorSize,daisyDescriptorSize/(1024*1024));
 
+  //**cmPinnedData = clCreateBuffer(cxGPUContext, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, memSize, NULL, &ciErrNum);
   daisy->descriptors = (float*)malloc(daisyDescriptorSize);
+  //cl_mem hostDaisyDescriptors = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY | CL_MEM_USE_HOST_PTR,
+  //                                             daisyDescriptorSize, (void*)daisy->descriptors, &error);
+
+
+  oclError("oclDaisy","clCreateBuffer (use_host_ptr)",error);
 
   cl_mem daisyBufferA = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY,
                                        daisySectionSize,(void*)NULL, &error);
-  //cl_mem daisyBufferB = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY,
-  //                                     daisySectionSize,(void*)NULL, &error);
+
+
+  cl_mem daisyBufferB = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY,
+                                       daisySectionSize,(void*)NULL, &error);
 
   oclError("oclDaisy","clCreateBuffer (daisy)",error);
+
+  cl_event gpuBuffersMapped;
+
+  //void * mappedDaisyBufferA = clEnqueueMapBuffer(daisyCl->queue, daisyBufferA, CL_TRUE, 
+  //                                               CL_MAP_READ, 0, daisySectionSize, 
+  //                                               0, NULL, &gpuBuffersMapped, &error);
+
+  oclError("oclDaisy","clMapBuffers (daisy)",error);
 
   int windowHeight = TR_DATA_WIDTH;
   int windowWidth  = TR_DATA_WIDTH;
@@ -721,10 +750,33 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
     allPairOffsetBuffers[smoothingNo] = pairOffsetBuffer;
 
   }
+  //clFinish(daisyCl->queue);
+  gettimeofday(&endDaisyTime,NULL);
+  startt = startDaisyTime.tv_sec+(startDaisyTime.tv_usec/1000000.0);
+  endt = endDaisyTime.tv_sec+(endDaisyTime.tv_usec/1000000.0);
+
+  diffp = endt-startt;
+  printf("\nInitDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
 
   gettimeofday(&startParaTime,NULL);
 
-  struct timeval startDaisyTime, endDaisyTime;
+  cl_event * memoryEvents = (cl_event*)malloc(sizeof(cl_event) * totalSections);
+  cl_event * kernelEvents = (cl_event*)malloc(sizeof(cl_event) * totalSections * daisy->smoothingsNo);
+
+  void * daisyDescriptorsSection;
+  cl_event dds;
+
+  /*
+  // MAPPED: mapped pointers to device buffer for conventional pointer access
+  void* dm_idata = clEnqueueMapBuffer(cqCommandQueue, cmDevData, CL_TRUE, CL_MAP_WRITE, 0, memSize, 0, NULL, NULL, &ciErrNum);
+  oclCheckError(ciErrNum, CL_SUCCESS);
+  for(unsigned int i = 0; i < MEMCOPY_ITERATIONS; i++)
+  {
+      memcpy(h_data, dm_idata, memSize);
+  }
+  ciErrNum = clEnqueueUnmapMemObject(cqCommandQueue, cmDevData, dm_idata, 0, NULL, NULL);
+  oclCheckError(ciErrNum, CL_SUCCESS);
+  */
 
   // for each 512x512 section... (sequentially first)
     // for each sigma...
@@ -735,21 +787,32 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
     size_t daisyWorkerOffsets[2] = {sectionX * daisyBlockWidth,sectionY * daisyBlockHeight};
       
-    for(int smoothingNo = 0; smoothingNo < 3; smoothingNo++){
+    short int resourceContext = sectionNo%2;
+
+    cl_event * prevMemoryEvents = NULL;
+    cl_event * currMemoryEvents = &memoryEvents[sectionNo];
+    cl_event * prevKernelEvents = NULL;
+    cl_event * currKernelEvents = &kernelEvents[sectionNo * daisy->smoothingsNo];
+
+    if(resourceContext != sectionNo){
+      prevMemoryEvents = &memoryEvents[sectionNo-2];
+      prevKernelEvents = &kernelEvents[(sectionNo-2) * daisy->smoothingsNo];
+    }
+
+    cl_mem daisyBuffer = (resourceContext ? daisyBufferA : daisyBufferB);
+    //void * mappedDaisyBuffer = (resourceContext ? mappedDaisyBufferA : mappedDaisyBufferA);
+
+    for(int smoothingNo = 0; smoothingNo < daisy->smoothingsNo; smoothingNo++){
 
       int pairOffsetsLength = allPairOffsetsLengths[smoothingNo];
-      int * pairOffsets = allPairOffsets[smoothingNo];
-
-      int petalsNo = daisy->petalsNo + (smoothingNo==0);
 
       printf("Running daisy section (%d,%d) out of %d - smoothing %d\n",sectionY,sectionX,totalSections,smoothingNo);
 
       int srcGlobalOffset = daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo * smoothingNo;
 
-      gettimeofday(&startDaisyTime,NULL);
 
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 0, sizeof(transBuffer), (void*)&transBuffer);
-      clSetKernelArg(daisy->oclPrograms.kernel_transd, 1, sizeof(daisyBufferA), (void*)&daisyBufferA);
+      clSetKernelArg(daisy->oclPrograms.kernel_transd, 1, sizeof(daisyBuffer), (void*)&daisyBuffer);
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 2, sizeof(allPairOffsetBuffers[smoothingNo]), (void*)&allPairOffsetBuffers[smoothingNo]);
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 3, sizeof(float) * (windowHeight * (windowWidth * daisy->gradientsNo + lclArrayPaddings[smoothingNo])), 0);
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 4, sizeof(int), (void*)&(daisy->paddedWidth));
@@ -758,15 +821,17 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 7, sizeof(int), (void*)&(pairOffsetsLength));
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&(lclArrayPaddings[smoothingNo]));
 
+
+      gettimeofday(&startDaisyTime,NULL);
       error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_transd, 2,
                                      daisyWorkerOffsets, daisyWorkerSize, daisyGroupSize,
-                                     0, NULL, NULL);
+                                     (resourceContext!=sectionNo),
+                                     &prevMemoryEvents[0],
+                                     &currKernelEvents[smoothingNo]);
       
+      gettimeofday(&endDaisyTime,NULL);
       oclError("oclDaisy","clEnqueueNDRangeKernel (11)",error);
 
-      error = clFinish(daisyCl->queue);
-
-      gettimeofday(&endDaisyTime,NULL);
       startt = startDaisyTime.tv_sec+(startDaisyTime.tv_usec/1000000.0);
       endt = endDaisyTime.tv_sec+(endDaisyTime.tv_usec/1000000.0);
 
@@ -775,29 +840,163 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
       oclError("oclDaisy","clFinish (daisy)",error);
 
-      //
-      // VERIFICATION CODE
-      //
+    }
 
-      // Verify transposition b)
-      int TESTING_TRANSD = 0;
-      if(TESTING_TRANSD){
+    //error = clFinish(daisyCl->queue);
+
+    oclError("oclDaisy","clFinish (block sigmas)",error);
+
+    gettimeofday(&startDaisyTime,NULL);
+    gettimeofday(&startTi,NULL);
+
+    int y;
+
+    //error = clFinish(daisyCl->queue);
+    if(sectionNo > 0){
+
+      int descriptorsOffset = ((sectionY-1) * daisyBlockHeight * daisyBlockWidth + 
+                               sectionX * daisyBlockWidth) * daisy->totalPetalsNo * daisy->gradientsNo;
+
+      clWaitForEvents(1, currMemoryEvents-1);
+
+      #pragma omp parallel for private(y)
+      for(y = 0; y < daisyBlockHeight; y++)
+        memcpy(daisy->descriptors + descriptorsOffset + y * daisyBlockWidth * 200, 
+               (float*)daisyDescriptorsSection + y * daisyBlockWidth * 200, 
+               daisyBlockWidth * 200 * sizeof(float));
+        
+    }
+
+    gettimeofday(&endTi,NULL);
+    startt = startTi.tv_sec+(startTi.tv_usec/1000000.0);
+    endt = endTi.tv_sec+(endTi.tv_usec/1000000.0);
+    diffp = endt-startt;
+    printf("\nTransferDaisyI: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
+
+    gettimeofday(&startTi,NULL);
+
+    if(sectionNo == 0){
+      daisyDescriptorsSection = (void*)clEnqueueMapBuffer(daisyCl->queue, hostPinnedDaisyDescriptors, 1,
+                                                          CL_MAP_WRITE, 0, daisySectionSize,
+                                                          0, NULL, &dds, &error);
+    }
+
+    int descriptorsOffset = (sectionY * daisyBlockHeight * daisyBlockWidth + 
+                             sectionX * daisyBlockWidth) * daisy->totalPetalsNo * daisy->gradientsNo;
+
+    error = clEnqueueReadBuffer(daisyCl->queue, daisyBuffer, 0,
+                                0, daisySectionSize, daisyDescriptorsSection,
+                                (resourceContext!=sectionNo)*3,
+                                currKernelEvents,
+                                &currMemoryEvents[0]);
+
+
+    //memcpy(daisy->descriptors + descriptorsOffset, daisyDescriptorsSection, daisySectionSize);
+
+    //memcpy(daisy->descriptors + descriptorsOffset, daisyDescriptorsSection, daisySectionSize);
+
+    gettimeofday(&endTi,NULL);
+    startt = startTi.tv_sec+(startTi.tv_usec/1000000.0);
+    endt = endTi.tv_sec+(endTi.tv_usec/1000000.0);
+    diffp = endt-startt;
+    printf("TransferDaisyII: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
+
+    gettimeofday(&startTi,NULL);
+
+    /*#pragma omp parallel for private(y)
+    for(y = 0; y < daisyBlockHeight; y++)
+      memcpy(daisy->descriptors + descriptorsOffset + y * daisyBlockWidth * 200, 
+             (float*)daisyDescriptorsSection + y * daisyBlockWidth * 200, 
+             daisyBlockWidth * 200 * sizeof(float));*/
+
+    if(sectionNo == totalSections-1){
+
+      int descriptorsOffset = (sectionY * daisyBlockHeight * daisyBlockWidth + 
+                               sectionX * daisyBlockWidth) * daisy->totalPetalsNo * daisy->gradientsNo;
+
+      clWaitForEvents(1, currMemoryEvents);
+
+      #pragma omp parallel for private(y)
+      for(y = 0; y < daisyBlockHeight; y++)
+        memcpy(daisy->descriptors + descriptorsOffset + y * daisyBlockWidth * 200, 
+               (float*)daisyDescriptorsSection + y * daisyBlockWidth * 200, 
+               daisyBlockWidth * 200 * sizeof(float));
+
+    }
+    gettimeofday(&endTi,NULL);
+    startt = startTi.tv_sec+(startTi.tv_usec/1000000.0);
+    endt = endTi.tv_sec+(endTi.tv_usec/1000000.0);
+    diffp = endt-startt;
+    printf("TransferDaisyIII: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
+
+    gettimeofday(&endDaisyTime,NULL);
+
+    startt = startDaisyTime.tv_sec+(startDaisyTime.tv_usec/1000000.0);
+    endt = endDaisyTime.tv_sec+(endDaisyTime.tv_usec/1000000.0);
+    diffp = endt-startt;
+    printf("\nTransferDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
+
+    oclError("oclDaisy","clFinish (block read)",error);
+  }
+
+  //error = clEnqueueUnmapMemObject(daisyCl->queue, daisyBufferA, mappedDaisyBufferA, 0, NULL, NULL);
+  error = clEnqueueUnmapMemObject(daisyCl->queue, hostPinnedDaisyDescriptors, daisyDescriptorsSection, 0, NULL, NULL);	
+  oclError("oclDaisy","clEnqueueUnMapBuffer (block)",error);
+
+  gettimeofday(&endParaTime,NULL);
+
+  startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
+  endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
+  diffp = endt-startt;
+  printf("\nTransDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight*daisy->gradientsNo*daisy->smoothingsNo)/(1000000.0f*diffp));
+
+  error = clFinish(daisyCl->queue);
+
+  oclError("oclDaisy","clFinish (whole evented)",error);
+  gettimeofday(&endFullTime,NULL);
+  startt = startFullTime.tv_sec+(startFullTime.tv_usec/1000000.0);
+  endt = endFullTime.tv_sec+(endFullTime.tv_usec/1000000.0);
+
+  diffp = endt-startt;
+  printf("\nWholeDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
+
+  //
+  // VERIFICATION CODE
+  //
+
+  // Verify transposition b)
+  int TESTING_TRANSD = 1;
+  if(TESTING_TRANSD){
+
+    for(int block = 0; block < totalSections; block++){
+
+      int sectionY = block / (daisy->paddedWidth / daisyBlockWidth);
+      int sectionX = block % (daisy->paddedWidth / daisyBlockWidth);
+
+      for(int smoothingNo = 0; smoothingNo < daisy->smoothingsNo; smoothingNo++){
+
+        int pairOffsetsLength = allPairOffsetsLengths[smoothingNo];
+        int * pairOffsets = allPairOffsets[smoothingNo];
+
+        int petalsNo = daisy->petalsNo + (smoothingNo==0);
 
         int petalStart = (smoothingNo > 0 ? smoothingNo * daisy->petalsNo + 1 : 0);
 
         printf("\nPetalsNo = %d\n",petalsNo);
 
-        float * daisyArray = (float*)malloc(sizeof(float) * 200 * daisyBlockWidth * daisyBlockHeight);
+        //float * daisyArray = (float*)malloc(sizeof(float) * 200 * daisyBlockWidth * daisyBlockHeight);
+        float * daisyArray = daisy->descriptors + block * daisyBlockHeight * daisyBlockWidth * 200;
 
-        error = clEnqueueReadBuffer(daisyCl->queue, daisyBufferA, CL_TRUE,
-                            0, daisyBlockWidth * daisyBlockHeight * 200 * sizeof(float), daisyArray,
-                            0, NULL, NULL);
+        //error = clEnqueueReadBuffer(daisyCl->queue, daisyBuffer, CL_TRUE,
+        //                    0, daisyBlockWidth * daisyBlockHeight * 200 * sizeof(float), daisyArray,
+        //                    0, NULL, NULL);
+        
 
-        oclError("oclDaisy","clEnqueueReadBuffer (12)",error);
+        //oclError("oclDaisy","clEnqueueReadBuffer (12)",error);
 
         clFinish(daisyCl->queue);
-        for(int r = 0; r < 64; r+=16){
-          for(k = petalStart * 8; k < (petalStart+petalsNo+2) * 8; k++)
+        for(int r = 0; r < 16; r+=16){
+          for(k = petalStart * 8; k < (petalStart+2) * 8; k++)
             printf(", %f",daisyArray[r * daisyBlockWidth * 200 + k]);
           printf("\n\n");
         }
@@ -809,6 +1008,9 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
 
         clFinish(daisyCl->queue);
 
+        long int issues = 0;
+        short int issued = 0;
+  
         int topLeftY = 16;
         int topLeftX = 16;
         int yStep = 16;
@@ -829,71 +1031,42 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl){
               int j;
               for(j = 0; j < 8; j++){
                 if(fabs(daisyArray[dst+j] - testArray[src1+j]) > 0.00001){
-                  printf("P%d - Issue at (1)%d,%d\n",p,y,x);
+                  if(!issued)
+                    printf("Issue at section %d,%d S=%d(1)\n",sectionY,sectionX,smoothingNo);
+                  //printf("P%d - Issue at (1)%d,%d\n",p,y,x);
+                  issued=1;
+                  issues++;
                 }
               }
               if(pairOffsets[p * 4+1] != TR_PAIRS_SINGLE_ONLY){
                 for(j = 8; j < 16; j++){
                   if(fabs(daisyArray[dst+j] - testArray[src2+j%8]) > 0.00001){
-                    printf("P%d - Issue at (2)%d,%d\n",p,y,x);
+                    if(!issued)
+                      printf("Issues at section %d,%d S=%d(2)\n",sectionY,sectionX,smoothingNo);
+                    //printf("P%d - Issue at (2)%d,%d\n",p,y,x);
+                    issued=1;
                   }
                 }
               }
             }
           }
         }
-
-        free(daisyArray);
+        printf("%ld issues\n",issues);
+        //free(daisyArray);
       }
-
-      //
-      // END OF VERIFICATION CODE
-      //
     }
-
-    int descriptorsOffset = (sectionY * daisyBlockHeight * daisyBlockWidth + 
-                             sectionX * daisyBlockWidth) * daisy->totalPetalsNo * daisy->gradientsNo;
-
-    gettimeofday(&startDaisyTime,NULL);
-
-    error = clEnqueueReadBuffer(daisyCl->queue, daisyBufferA, CL_TRUE,
-                                0, daisySectionSize, daisy->descriptors + descriptorsOffset,
-                                0, NULL, NULL);
-
-    oclError("oclDaisy","clEnqueueReadBuffer (block)",error);
-
-    error = clFinish(daisyCl->queue);
-
-    gettimeofday(&endDaisyTime,NULL);
-    startt = startDaisyTime.tv_sec+(startDaisyTime.tv_usec/1000000.0);
-    endt = endDaisyTime.tv_sec+(endDaisyTime.tv_usec/1000000.0);
-
-    diffp = endt-startt;
-    printf("\nTransferDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
-
-    oclError("oclDaisy","clFinish (block read)",error);
   }
 
-  gettimeofday(&endParaTime,NULL); // including verification currently
-
-  startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
-  endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
-  diffp = endt-startt;
-  printf("\nTransDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight*daisy->gradientsNo*daisy->smoothingsNo)/(1000000.0f*diffp));
-
-
-  gettimeofday(&endFullTime,NULL);
-  startt = startFullTime.tv_sec+(startFullTime.tv_usec/1000000.0);
-  endt = endFullTime.tv_sec+(endFullTime.tv_usec/1000000.0);
-
-  diffp = endt-startt;
-  printf("\nWholeDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
+  //
+  // END OF VERIFICATION CODE
+  //
 
   // Buffers to release;
   // massBuffer
   // filterBuffer
   // Release mass buffer and reallocate final daisy buffer
   clReleaseMemObject(daisyBufferA);
+  //clReleaseMemObject(daisyBufferB);
   clReleaseMemObject(massBuffer);
   clReleaseMemObject(transBuffer);
   clReleaseMemObject(filterBuffer);

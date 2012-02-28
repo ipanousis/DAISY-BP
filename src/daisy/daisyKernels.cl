@@ -28,8 +28,8 @@ __kernel void convolve_x7(__global   float * massArray,
     const int dstOffset = pddWidth * pddHeight + srcOffset;
     float s = 0;
 
-    for(int i = lx-3; i < lx+4; i++)
-      s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-lx+3];
+    for(int i = lx-2; i < lx+3; i++)
+      s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-lx+2];
 
     massArray[dstOffset + w * CONVX_GROUP_SIZE_X] = s;
   }
@@ -304,8 +304,8 @@ __kernel void convolve_x29(__global   float * massArray,
     const int dstOffset = pddWidth * pddHeight * 8 * 2 + srcOffset;
     float s = 0;
 
-    for(int i = lx-14; i < lx+15; i++)
-      s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-lx+14];
+    for(int i = lx-14+1; i < lx+15-1; i++)
+      s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-lx+14-1];
 
     massArray[dstOffset + w * CONVX_GROUP_SIZE_X] = s;
   }
@@ -341,8 +341,8 @@ __kernel void convolve_y29(__global   float * massArray,
     const int dstOffset = srcOffset - pddWidth * pddHeight * 8;
     float s = 0;
 
-    for(int i = ly-14; i < ly+15; i++)
-      s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-ly+14];
+    for(int i = ly-14+1; i < ly+15-1; i++)
+      s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-ly+14-1];
 
     massArray[dstOffset + w * CONVY_GROUP_SIZE_Y * pddWidth] = s;
   }
