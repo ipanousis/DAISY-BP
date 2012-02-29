@@ -809,6 +809,9 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   }
 
+  error = clFinish(daisyCl->queue);
+  oclError("oclDaisy","clFinish (daisy)",error);
+
   gettimeofday(&times->endTransDaisy,NULL);
 
   gettimeofday(&times->endFull,NULL);
@@ -817,105 +820,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   times->endt = times->endFull.tv_sec+(times->endFull.tv_usec/1000000.0);
   times->difft = times->endt-times->startt;
   printf("\nDaisyFull: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*times->difft));
-
-  /*
-
-  gettimeofday(&startFullTime,NULL);
-  gettimeofday(&startParaTime,NULL);
-  gettimeofday(&endParaTime,NULL);
-
-  startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
-  endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
-  diffp = endt-startt;
-  printf("\nSmooth 7: %.4fs (%.4f MPixel/sec)\n",diffp,(paddedHeight*paddedWidth)/(1000000.0f*diffp));
-
-  gettimeofday(&startParaTime,NULL);
-  gettimeofday(&endParaTime,NULL);
-
-  startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
-  endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
-  diffp = endt-startt;
-  printf("\nSmooth 11: %.4fs (%.4f MPixel/sec)\n",diffp,(paddedHeight*paddedWidth*daisy->gradientsNo)/(1000000.0f*diffp));
-  gettimeofday(&startParaTime,NULL);
-  gettimeofday(&endParaTime,NULL);
-
-  startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
-  endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
-  diffp = endt-startt;
-  printf("\nSmooth 23: %.4fs (%.4f MPixel/sec)\n",diffp,(paddedHeight*paddedWidth*daisy->gradientsNo)/(1000000.0f*diffp));
-  gettimeofday(&endParaTime,NULL);
-
-  startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
-  endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
-  diffp = endt-startt;
-  printf("\nSmooth 29x: %.4fs (%.4f MPixel/sec)\n",diffp,(paddedHeight*paddedWidth*daisy->gradientsNo)/(1000000.0f*diffp));
-
-  startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
-  endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
-  diffp = endt-startt;
-  printf("\nSmooth 29y: %.4fs (%.4f MPixel/sec)\n",diffp,(paddedHeight*paddedWidth*daisy->gradientsNo)/(1000000.0f*diffp));
-
-
-  gettimeofday(&endParaTime,NULL);
-
-  startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
-  endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
-  diffp = endt-startt;
-  printf("\nTransGradients: %.4fs (%.4f MPixel/sec)\n",diffp,(paddedHeight*paddedWidth*daisy->gradientsNo*daisy->smoothingsNo)/(1000000.0f*diffp));
-
-      gettimeofday(&startDaisyTime,NULL);
-      
-      gettimeofday(&endDaisyTime,NULL);
-      oclError("oclDaisy","clEnqueueNDRangeKernel (11)",error);
-
-      startt = startDaisyTime.tv_sec+(startDaisyTime.tv_usec/1000000.0);
-      endt = endDaisyTime.tv_sec+(endDaisyTime.tv_usec/1000000.0);
-
-      diffp = endt-startt;
-      printf("\nBlockDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
-
-    gettimeofday(&endTi,NULL);
-    startt = startTi.tv_sec+(startTi.tv_usec/1000000.0);
-    endt = endTi.tv_sec+(endTi.tv_usec/1000000.0);
-    diffp = endt-startt;
-    printf("\nTransferDaisyI: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
-
-  startt = startDaisyTime.tv_sec+(startDaisyTime.tv_usec/1000000.0);
-  endt = endDaisyTime.tv_sec+(endDaisyTime.tv_usec/1000000.0);
-
-  diffp = endt-startt;
-  printf("\nInitDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
-
-    startt = startTi.tv_sec+(startTi.tv_usec/1000000.0);
-    endt = endTi.tv_sec+(endTi.tv_usec/1000000.0);
-    diffp = endt-startt;
-    printf("\nTransferDaisyI: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
-
-    startt = startTi.tv_sec+(startTi.tv_usec/1000000.0);
-    endt = endTi.tv_sec+(endTi.tv_usec/1000000.0);
-    diffp = endt-startt;
-    printf("TransferDaisyIII: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
-
-    startt = startTi.tv_sec+(startTi.tv_usec/1000000.0);
-    endt = endTi.tv_sec+(endTi.tv_usec/1000000.0);
-    diffp = endt-startt;
-    printf("TransferDaisyII: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
-
-    startt = startDaisyTime.tv_sec+(startDaisyTime.tv_usec/1000000.0);
-    endt = endDaisyTime.tv_sec+(endDaisyTime.tv_usec/1000000.0);
-    diffp = endt-startt;
-    printf("\nTransferDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
-
-  startt = startParaTime.tv_sec+(startParaTime.tv_usec/1000000.0);
-  endt = endParaTime.tv_sec+(endParaTime.tv_usec/1000000.0);
-  difft = endt-startt;
-  printf("\nTransDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight*daisy->gradientsNo*daisy->smoothingsNo)/(1000000.0f*diffp));
-
-  startt = startFullTime.tv_sec+(startFullTime.tv_usec/1000000.0);
-  endt = endFullTime.tv_sec+(endFullTime.tv_usec/1000000.0);
-  difft = endt-startt;
-  printf("\nWholeDaisy: %.4fs (%.4f MPixel/sec)\n",diffp,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*diffp));
-  */
 
   //
   // VERIFICATION CODE
