@@ -45,10 +45,13 @@ int main( int argc, char **argv  )
 
   double start,end,diff;
 
+  time_params times;
+  times.measureDeviceHostTransfers = 0;
+
   initOcl(daisy, daisyCl);
   //initOcl(daisy, daisyOcl);
 
-  oclDaisy(daisy, daisyCl);
+  oclDaisy(daisy, daisyCl, &times);
   //oclDaisy(daisy, daisyOcl);
 
   //printf("Paired Offsets: %d\n",pairedOffsetsLength);

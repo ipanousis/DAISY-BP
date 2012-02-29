@@ -3,7 +3,7 @@
 #define CONVX_WORKER_STEPS 4
 
 __kernel void convolve_x7(__global   float * massArray,
-                          __constant float * fltArray,
+                          __constant float  * fltArray,
                           const      int     pddWidth,
                           const      int     pddHeight)
 {
@@ -64,8 +64,8 @@ __kernel void convolve_y7(__global   float * massArray,
     const int dstOffset = srcOffset + pddWidth * pddHeight * 7;
     float s = 0;
 
-    for(int i = ly-3; i < ly+4; i++)
-      s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-ly+3];
+    for(int i = ly-2; i < ly+3; i++)
+      s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-ly+2];
 
     massArray[dstOffset + w * CONVY_GROUP_SIZE_Y * pddWidth] = s;
   }
@@ -80,11 +80,11 @@ __kernel void gradient_8all(__global float * massArray,
   const int c = get_global_id(0) % pddWidth;
   const int srcOffset = pddWidth * pddHeight * 8 + r * pddWidth + c;
 
-  float4 n;
-  n.x = (c > 0           ? massArray[srcOffset-1]:massArray[srcOffset]);
-  n.y = (r > 0           ? massArray[srcOffset-pddWidth]:massArray[srcOffset]);
-  n.z = (c < pddWidth-1  ? massArray[srcOffset+1]:massArray[srcOffset]);
-  n.w = (r < pddHeight-1 ? massArray[srcOffset+pddWidth]:massArray[srcOffset]);
+  short4 n;
+  n.x = (short)(c > 0           ? massArray[srcOffset-1]:massArray[srcOffset]);
+  n.y = (short)(r > 0           ? massArray[srcOffset-pddWidth]:massArray[srcOffset]);
+  n.z = (short)(c < pddWidth-1  ? massArray[srcOffset+1]:massArray[srcOffset]);
+  n.w = (short)(r < pddHeight-1 ? massArray[srcOffset+pddWidth]:massArray[srcOffset]);
 
   float8 gradients;
   const float8 angles = (float8)(0.0f, M_PI / 4, M_PI / 2, 3 * (M_PI / 4), M_PI,
@@ -127,7 +127,7 @@ __kernel void gradient_8all(__global float * massArray,
 #define CONVX_WORKER_STEPS 4
 
 __kernel void convolve_x11(__global   float * massArray,
-                           __constant float * fltArray,
+                           __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
@@ -165,7 +165,7 @@ __kernel void convolve_x11(__global   float * massArray,
 #define CONVY_WORKER_STEPS 8
 
 __kernel void convolve_y11(__global   float * massArray,
-                           __constant float * fltArray,
+                           __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
@@ -202,7 +202,7 @@ __kernel void convolve_y11(__global   float * massArray,
 //#define CONVX_WORKER_STEPS 8
 
 __kernel void convolve_x23(__global   float * massArray,
-                           __constant float * fltArray,
+                           __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
@@ -240,7 +240,7 @@ __kernel void convolve_x23(__global   float * massArray,
 #define CONVY_WORKER_STEPS 4
 
 __kernel void convolve_y23(__global   float * massArray,
-                           __constant float * fltArray,
+                           __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
@@ -277,7 +277,7 @@ __kernel void convolve_y23(__global   float * massArray,
 //#define CONVX_WORKER_STEPS 8
 
 __kernel void convolve_x29(__global   float * massArray,
-                           __constant float * fltArray,
+                           __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
@@ -314,7 +314,7 @@ __kernel void convolve_x29(__global   float * massArray,
 #define CONVY_WORKER_STEPS 4
 
 __kernel void convolve_y29(__global   float * massArray,
-                           __constant float * fltArray,
+                           __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
@@ -393,7 +393,7 @@ __kernel void transposeGradients(__global float * srcArray,
     const int dstRow = smoothSection * srcHeight + groupRow;
     const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
 
-    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX] * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
+    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX] * ((float)l2normSum); // this division... the division ALONE... seems to take 10 ms !!!
 }
 
 //#define TRANSD_BLOCK_WIDTH 512
@@ -425,6 +425,8 @@ __kernel void transposeDaisy(__global   float * srcArray,
 
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
+
+  //__local float lclArray[TRANSD_DATA_WIDTH * (TRANSD_DATA_WIDTH * GRADIENT_NUM)];
 
   // coalesced read (srcGlobalOffset + xid,yid) + padded write to lclArray
   //const int stepsPerWorker = (srcWidth * GRADIENT_NUM) / get_global_size(0); // => globalSizeX must divide 512 (16,32,64,128,256)
