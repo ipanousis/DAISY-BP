@@ -80,11 +80,11 @@ __kernel void gradient_8all(__global float * massArray,
   const int c = get_global_id(0) % pddWidth;
   const int srcOffset = pddWidth * pddHeight * 8 + r * pddWidth + c;
 
-  short4 n;
-  n.x = (short)(c > 0           ? massArray[srcOffset-1]:massArray[srcOffset]);
-  n.y = (short)(r > 0           ? massArray[srcOffset-pddWidth]:massArray[srcOffset]);
-  n.z = (short)(c < pddWidth-1  ? massArray[srcOffset+1]:massArray[srcOffset]);
-  n.w = (short)(r < pddHeight-1 ? massArray[srcOffset+pddWidth]:massArray[srcOffset]);
+  float4 n;
+  n.x = (c > 0           ? massArray[srcOffset-1]:massArray[srcOffset]);
+  n.y = (r > 0           ? massArray[srcOffset-pddWidth]:massArray[srcOffset]);
+  n.z = (c < pddWidth-1  ? massArray[srcOffset+1]:massArray[srcOffset]);
+  n.w = (r < pddHeight-1 ? massArray[srcOffset+pddWidth]:massArray[srcOffset]);
 
   float8 gradients;
   const float8 angles = (float8)(0.0f, M_PI / 4, M_PI / 2, 3 * (M_PI / 4), M_PI,

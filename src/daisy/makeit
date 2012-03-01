@@ -1,5 +1,6 @@
 #!/bin/sh
 cd $PROJ
+export OMP_NUM_THREADS=8
 g++ -I$PROJ/include -I/usr/local/cuda/include \
     -fopenmp -lOpenCL -ljpeg -lpng \
     -fno-strict-aliasing \

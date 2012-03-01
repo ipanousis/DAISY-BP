@@ -46,7 +46,7 @@ int main( int argc, char **argv  )
   double start,end,diff;
 
   time_params times;
-  times.measureDeviceHostTransfers = 0;
+  times.measureDeviceHostTransfers = 1;
 
   initOcl(daisy, daisyCl);
   //initOcl(daisy, daisyOcl);
@@ -61,7 +61,7 @@ int main( int argc, char **argv  )
   string binaryfile = filename;
   binaryfile += ".bdaisy";
 //   kutility::save_binary(filename, m_dense_descriptors, m_h*m_w, m_descriptor_size, 1, kutility::TYPE_FLOAT );
-  kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+  //kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
 
   gettimeofday(&endTime,NULL);
 
