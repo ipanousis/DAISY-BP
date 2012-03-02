@@ -10,7 +10,7 @@
 #define max(a,b) (a > b ? a : b)
 
 #define DAISY_PROFILING
-//#define DAISY_HOST_TRANSFER
+#define DAISY_HOST_TRANSFER
 
 #ifndef OCL_DAISY_PROGRAMS
 #define OCL_DAISY_PROGRAMS

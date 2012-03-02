@@ -102,7 +102,7 @@ int main( int argc, char **argv  )
     //int startHeight = 128;
     int incrementWidth = 128;
     //int incrementHeight = 128;
-    int finalWidth = 1536;
+    int finalWidth = 1024+128;
     //int finalHeight = 1536;
 
     // allocate the memory
@@ -118,9 +118,9 @@ int main( int argc, char **argv  )
 
     for(int width = startWidth; width < finalWidth + incrementWidth; width+=incrementWidth){
 
-      int millionPixels = width * width / (float)1000000.0f;
+      printf("%dx%d\n",width,width);
 
-      int iterations = 50;
+      int iterations = 1;
       int success = 0;
 
       time_params times;
@@ -131,7 +131,7 @@ int main( int argc, char **argv  )
       double t_transBhost = 0;
       double t_whole = 0;
 
-      times.measureDeviceHostTransfers = 0;
+      times.measureDeviceHostTransfers = 1;
 
       daisy = newDaisyParams(array, width, width, 8, 8, 3);
       daisy->oclPrograms = *daisyPrograms;
@@ -159,6 +159,8 @@ int main( int argc, char **argv  )
 
       fprintf(csvOut, templateRow, width, width, t_convGrad, t_transA, t_transB, t_transBhost, t_whole, 
                       times.measureDeviceHostTransfers, iterations, success);
+
+      if(width == finalWidth) break;
 
       daisy = newDaisyParams(array, width + incrementWidth, width, 8, 8, 3);
       daisy->oclPrograms = *daisyPrograms;
@@ -198,7 +200,6 @@ int main( int argc, char **argv  )
     // print name of output file
     fclose(csvOut);
     printf("Speed test results written to %s.\n", csvOutName);
-
     free(daisy->descriptors);
     free(array);
   }
