@@ -10,7 +10,7 @@
 #define max(a,b) (a > b ? a : b)
 
 #define DAISY_PROFILING
-#define DAISY_HOST_TRANSFER
+//#define DAISY_HOST_TRANSFER
 
 #ifndef OCL_DAISY_PROGRAMS
 #define OCL_DAISY_PROGRAMS
@@ -82,7 +82,7 @@ typedef struct time_params_tag{
 
 daisy_params * newDaisyParams(unsigned char*, int, int, int, int, int);
 
-int initOcl(daisy_params *, ocl_constructs *);
+int initOcl(ocl_daisy_programs*, ocl_constructs *);
 
 int oclDaisy(daisy_params *, ocl_constructs *, time_params *);
 
