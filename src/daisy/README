@@ -1,5 +1,0 @@
-"Any access (via a variable or a pointer) to data residing in global
-memory compiles to a single global memory instruction if and only if the size of the
-data type is 1, 2, 4, 8, or 16 bytes and the data is naturally aligned (i.e. its address is a
-multiple of that size)"
-

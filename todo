@@ -1,44 +1,60 @@
 ---
 HIGH
 ---
-*DAISY implementation baby oh yeah
-  - convolutions - optimise X and Y (only 29's)
-  - transpositions - profile + optimise
-  - manage sectioning of images into 512x512 during final transposition
-(transposeDaisy kernel)
-  // todo;
-  // require group size 16x16
-  // fill zeros in petals that source outside the borders - center-symmetrical property of petals?
-  // simplify?
-  - compare to CPU daisy
-  - benchmark GPU against CPU
-  - consider downsampling with higher sigmas
+DAISY
+
+*functionality
+ - properly measure CPU version with 1 core and 8 cores in the same range of inputs as GPU
+ - compare quality with methods;
+   - percentage of max difference between 2 CPUs and between 2 GPUs
+   - percentage of difference between CPU and GPU descriptors in one image
+   - look at SIFT on GPU papers to see verification or benchmarking metrics/methods
+ - demonstrate through application;
+   - real-time rigid body correspondence in stereo?
+
+*implementation
+ - target 512x512 computation for speed up
+ - require group size in all kernels
+ - simplify final transposition? (medium)
+
+*downsampling with higher sigmas
+ - think this through
+ - how the blurr + downsample will happen
+ - how the data fetching of downsampled data will happen
+ - try it full speed
+ + ideally the above should be written for variable blurr/downsample rate
+ + consider the genericness of the implementation wrt. sigmas and number of gradients (as much as possible) 
+
+REPORT
+ - lay out the structure
+ - start putting the technical stuff together
+
 ---
 MEDIUM
 ---
 test data
 record performance test results with visual profiler
-BP implementation
-manage sectioning of input images into 1024x1024 sections for larger images
 ---
 LOW
 ---
+manage sectioning of input images into 1024x1024 sections for larger images
+BP implementation
 *for report
   - make incremental optimisation kernels (convolution)
   - correctness testing (conv, gradients)
-software license?
-*belief propagation matching - heavy reading papers/code understand bp - understood up until a point, read sift flow code or other to understand properly, wait until DAISY is done
--choose objective function for BP - vaguely done, leave for later
-GIT setup online github
-*convolutions should rely only on x64 padding not x128, some are on x128 now
+(*belief propagation matching - heavy reading papers/code understand bp - understood up until a point, read sift flow code or other to understand properly, wait until DAISY is done)
+(-choose objective function for BP - vaguely done, leave for later)
 ---
 WAIT
 ---
-RGB or grayscale images? - grayscale
 ---
 DONE
 ---
+RGB or grayscale images? - grayscale
+*convolutions should rely only on x64 padding not x128, some are on x128 now
 GIT setup
+GIT setup online github
 **lit review
 *DAISY implementation
   - tested transposition by storing source indeces
+software license? - open source
