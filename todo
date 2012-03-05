@@ -10,7 +10,7 @@ DAISY
    - percentage of difference between CPU and GPU descriptors in one image
    - look at SIFT on GPU papers to see verification or benchmarking metrics/methods
  - demonstrate through application;
-   - real-time rigid body correspondence in stereo?
+   - real-time rigid body correspondence in stereo? (rotational invariance... mmmm!)
 
 *implementation
  - target 512x512 computation for speed up
