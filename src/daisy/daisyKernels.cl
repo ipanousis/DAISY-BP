@@ -393,7 +393,7 @@ __kernel void transposeGradients(__global float * srcArray,
     const int dstRow = smoothSection * srcHeight + groupRow;
     const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
 
-    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX] * ((float)l2normSum); // this division... the division ALONE... seems to take 10 ms !!!
+    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX] * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
 }
 
 //#define TRANSD_BLOCK_WIDTH 512

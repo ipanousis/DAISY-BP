@@ -5,6 +5,7 @@
 
 using namespace kutility;
 
+double getStd(double* observations, int length);
 double timeDiff(struct timeval start, struct timeval end);
 
 int main( int argc, char **argv  )
@@ -13,35 +14,20 @@ int main( int argc, char **argv  )
   struct timeval startTime,endTime;
   int width, height;
   uchar* srcArray = NULL;
-  //uchar* othArray = NULL;
+
   gettimeofday(&startTime,NULL);
-  /*
-  double opy = -1;
-  double opx = -1;
-  int opo =  0;
-
-  int rad   = 15;
-  int radq  =  3;
-  int thq   =  8;
-  int histq =  8;
-
-  //int nrm_type = NRM_PARTIAL;
-
-  int orientation_resolution = 18;*/
 
   char* filename = NULL;
 
   // Get command line options
   if(argc > counter+1 && (!strcmp("-i", argv[counter]) || !strcmp("--image", argv[counter]))){
+
     filename = argv[++counter];
-    // im = load_byte_image(filename,w,h);
     load_gray_image (filename, srcArray, height, width);
-    //load_gray_image (filename, othArray, height, width);
     printf("HxW=%dx%d\n",height, width);
     counter++;
     
     ocl_constructs * daisyCl = newOclConstructs(0,0,0);
-    //ocl_constructs * daisyOcl = newOclConstructs(0,0,0);
     ocl_daisy_programs * daisyPrograms = (ocl_daisy_programs*)malloc(sizeof(ocl_daisy_programs));
     daisy_params * daisy = newDaisyParams(srcArray, height, width, 8, 8, 3);
 
@@ -51,12 +37,10 @@ int main( int argc, char **argv  )
     times.measureDeviceHostTransfers = 0;
 
     initOcl(daisyPrograms,daisyCl);
-    //initOcl(daisy, daisyOcl);
 
     daisy->oclPrograms = *daisyPrograms;
 
     oclDaisy(daisy, daisyCl, &times);
-    //oclDaisy(daisy, daisyOcl);
 
     //printf("Paired Offsets: %d\n",pairedOffsetsLength);
     //printf("Actual Pairs: %d\n",actualPairs);
@@ -98,11 +82,11 @@ int main( int argc, char **argv  )
 
     FILE * csvOut = fopen(csvOutName,"w");
 
-    int startWidth = 128;
+    int startWidth = 1024+128;
     //int startHeight = 128;
     int incrementWidth = 128;
     //int incrementHeight = 128;
-    int finalWidth = 1024+128;
+    int finalWidth = 1536;
     //int finalHeight = 1536;
 
     // allocate the memory
@@ -112,16 +96,17 @@ int main( int argc, char **argv  )
     for(int i = 0; i < finalWidth * finalWidth; i++)
       array[i] = i % 255;
 
-    fprintf(csvOut,"height,width,convgrad,transA,transB,transBhost,whole,dataTransfer,iterations,success\n");
+    fprintf(csvOut,"height,width,convgrad,transA,transB,transBhost,whole,wholestd,dataTransfer,iterations,success\n");
 
-    char* templateRow = "%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d\n";
+    char* templateRow = "%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d\n";
 
     for(int width = startWidth; width < finalWidth + incrementWidth; width+=incrementWidth){
 
       printf("%dx%d\n",width,width);
 
-      int iterations = 1;
+      int iterations = 25;
       int success = 0;
+      double * wholeTimes = (double*)malloc(sizeof(double) * iterations);
 
       time_params times;
 
@@ -147,7 +132,8 @@ int main( int argc, char **argv  )
         else
           t_transB += timeDiff(times.startTransDaisy, times.endTransDaisy);
 
-        t_whole += timeDiff(times.startFull, times.endFull);
+        wholeTimes[i] = timeDiff(times.startFull, times.endFull);
+        t_whole += wholeTimes[i];
 
       }
 
@@ -157,7 +143,9 @@ int main( int argc, char **argv  )
       t_transB      /= iterations;
       t_whole       /= iterations;
 
-      fprintf(csvOut, templateRow, width, width, t_convGrad, t_transA, t_transB, t_transBhost, t_whole, 
+      double wholeStd = getStd(wholeTimes,iterations);
+
+      fprintf(csvOut, templateRow, width, width, t_convGrad, t_transA, t_transB, t_transBhost, t_whole, wholeStd,
                       times.measureDeviceHostTransfers, iterations, success);
 
       if(width == finalWidth) break;
@@ -182,8 +170,8 @@ int main( int argc, char **argv  )
         else
           t_transB += timeDiff(times.startTransDaisy, times.endTransDaisy);
 
-        t_whole += timeDiff(times.startFull, times.endFull);
-
+        wholeTimes[i] = timeDiff(times.startFull, times.endFull);
+        t_whole += wholeTimes[i];
       }
 
       t_convGrad    /= iterations;
@@ -192,8 +180,12 @@ int main( int argc, char **argv  )
       t_transB      /= iterations;
       t_whole       /= iterations;
       
-      fprintf(csvOut, templateRow, width + incrementWidth, width, t_convGrad, t_transA, t_transB, t_transBhost, t_whole, 
+      wholeStd = getStd(wholeTimes,iterations);
+
+      fprintf(csvOut, templateRow, width + incrementWidth, width, t_convGrad, t_transA, t_transB, t_transBhost, t_whole, wholeStd,
                       times.measureDeviceHostTransfers, iterations, success);
+
+      printf("wholestd = %.4f\n",wholeStd);
 
     }
     
@@ -210,5 +202,19 @@ int main( int argc, char **argv  )
 double timeDiff(struct timeval start, struct timeval end){
 
   return (end.tv_sec+(end.tv_usec/1000000.0)) - (start.tv_sec+(start.tv_usec/1000000.0));
+
+}
+
+double getStd(double * observations, int length){
+
+  double mean = .0f;
+  for(int i = 0; i < length; i++)
+    mean += observations[i];
+  mean /= length;
+  double stdSum = .0f;
+  for(int i = 0; i < length; i++)
+    stdSum += pow(observations[i] - mean,2);
+
+  return sqrt(stdSum / length);
 
 }

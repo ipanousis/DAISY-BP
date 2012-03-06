@@ -4,7 +4,8 @@ HIGH
 DAISY
 
 *functionality
- - properly measure CPU version with 1 core and 8 cores in the same range of inputs as GPU
+ - properly measure CPU version with 1 core and 8 cores in the same range of inputs as GPU (done)
+ - re-measure everything with standard deviation included (done)
  - compare quality with methods;
    - percentage of max difference between 2 CPUs and between 2 GPUs
    - percentage of difference between CPU and GPU descriptors in one image
@@ -28,6 +29,10 @@ DAISY
 REPORT
  - lay out the structure
  - start putting the technical stuff together
+   performance:
+   - big drops in with-transfer speeds -> make a table with overlapping steps and times to demonstrate overlap and impact of it and why the speedup increases with more and more blocks (impact of the remainder transfer that doesn't overlap reduces) -> drop after 1024x1024 is much smaller than drop after 512x512
+   - relative std of times reach an isolated max peak (with low number of points) of ~3% but even that is trivial
+     in reality (about 5ms) for that computation that takes about 120ms
 
 ---
 MEDIUM
