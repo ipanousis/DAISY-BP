@@ -131,7 +131,7 @@ __kernel void convolve_x11(__global   float * massArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
-
+  // prepare to...... downsampleeeeeee!!!!!!!!!
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
   __local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
