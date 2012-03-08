@@ -29,7 +29,9 @@ int main( int argc, char **argv  )
     
     ocl_constructs * daisyCl = newOclConstructs(0,0,0);
     ocl_daisy_programs * daisyPrograms = (ocl_daisy_programs*)malloc(sizeof(ocl_daisy_programs));
-    daisy_params * daisy = newDaisyParams(srcArray, height, width, 8, 8, 3);
+
+    float sigmas[3] = {2.5,5,7.5};
+    daisy_params * daisy = newDaisyParams(srcArray, height, width, 8, 8, 3, sigmas);
 
     double start,end,diff;
 
@@ -47,7 +49,7 @@ int main( int argc, char **argv  )
 
     string binaryfile = filename;
     binaryfile += ".bdaisy";
-    kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+    //kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
 
     gettimeofday(&endTime,NULL);
 
@@ -118,7 +120,7 @@ int main( int argc, char **argv  )
 
       times.measureDeviceHostTransfers = 1;
 
-      daisy = newDaisyParams(array, width, width, 8, 8, 3);
+      daisy = newDaisyParams(array, width, width, 8, 8, 3, NULL);
       daisy->oclPrograms = *daisyPrograms;
 
       for(int i = 0; i < iterations; i++){
@@ -150,7 +152,7 @@ int main( int argc, char **argv  )
 
       if(width == finalWidth) break;
 
-      daisy = newDaisyParams(array, width + incrementWidth, width, 8, 8, 3);
+      daisy = newDaisyParams(array, width + incrementWidth, width, 8, 8, 3, NULL);
       daisy->oclPrograms = *daisyPrograms;
 
       t_convGrad = 0;

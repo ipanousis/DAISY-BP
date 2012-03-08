@@ -2,6 +2,11 @@
 #include <omp.h>
 #include <sys/time.h>
 
+long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
+long int verifyConvolutionX(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
+
+void generatePyramidSettings(daisy_params * params);
+
 float * generatePetalOffsets(float, int, short int);
 
 int * generateTranspositionOffsets(int, int, float*, int, int*, int*);
@@ -16,8 +21,20 @@ int * generateTranspositionOffsets(int, int, float*, int, int*, int*);
 #define TR_PAIRS_SINGLE_ONLY -999
 #define TR_PAIRS_OFFSET_WIDTH 1000
 
+pyramid_layer_set * newPyramidLayerSetting(float sigma, float newTotalSigma, int prevTotalDownsample){
+
+  pyramid_layer_set * set = (pyramid_layer_set*) malloc(sizeof(pyramid_layer_set));
+  set->phi = PHI_SIGMA_DOWNSAMPLE;
+  set->sigma = sigma;
+  set->downsample = (int)floor(set->sigma / set->phi);
+  set->t_sigma = newTotalSigma;
+  set->t_downsample = prevTotalDownsample + set->downsample;
+
+  return set;
+}
+
 daisy_params * newDaisyParams(unsigned char* array, int height, int width,
-                              int gradientsNo, int petalsNo, int smoothingsNo){
+                              int gradientsNo, int petalsNo, int smoothingsNo, float* sigmas){
 
   daisy_params * params = (daisy_params*) malloc(sizeof(daisy_params));
   params->array = array;
@@ -29,8 +46,42 @@ daisy_params * newDaisyParams(unsigned char* array, int height, int width,
   params->totalPetalsNo = petalsNo * smoothingsNo + 1;
   params->descriptors = NULL;
   params->descriptorLength = params->totalPetalsNo * gradientsNo;
+  params->sigmas = sigmas;
+  params->paddedWidth = params->width + (ARRAY_PADDING - params->width % ARRAY_PADDING) % ARRAY_PADDING;
+  params->paddedHeight = params->height + (ARRAY_PADDING - params->height % ARRAY_PADDING) % ARRAY_PADDING;
+
+  generatePyramidSettings(params);
 
   return params;
+}
+
+void generatePyramidSettings(daisy_params * params){
+
+  params->pyramidLayerSettings = (pyramid_layer_set**) malloc(sizeof(pyramid_layer_set*) * params->smoothingsNo);
+  params->pyramidLayerSizes = (int*) malloc(sizeof(int) * params->smoothingsNo);
+  params->pyramidLayerOffsets = (int*) malloc(sizeof(int) * params->smoothingsNo);
+
+  for(int s = 0; s < params->smoothingsNo; s++){
+
+    float sigma;
+    if(s == 0)
+      sigma = params->sigmas[0];
+    else{
+      sigma = sqrt(pow(params->sigmas[s],2) - pow(params->sigmas[s-1],2)) / pow((DOWNSAMPLE_RATE / 2),params->pyramidLayerSettings[s-1]->t_downsample);
+    }
+  
+    int prevTotalDownsample = (s > 0 ? params->pyramidLayerSettings[s-1]->t_downsample : 0);
+
+    params->pyramidLayerSettings[s] = newPyramidLayerSetting(sigma,params->sigmas[s],prevTotalDownsample);
+
+    int totalDownsample = pow(DOWNSAMPLE_RATE,params->pyramidLayerSettings[s]->t_downsample);
+
+    params->pyramidLayerSizes[s] = (params->paddedHeight * params->paddedWidth * params->gradientsNo) / totalDownsample;
+    params->pyramidLayerOffsets[s] = (s > 0 ? params->pyramidLayerOffsets[s-1] + params->pyramidLayerSizes[s-1] : 0);
+
+    printf("sigma computed at level %d: %f\n",s,sigma);
+  }
+
 }
 
 int initOcl(ocl_daisy_programs * daisy, ocl_constructs * daisyCl){
@@ -69,15 +120,15 @@ int initOcl(ocl_daisy_programs * daisy, ocl_constructs * daisyCl){
 
   // Build gradient kernel
   
-  daisy->kernel_gAll = clCreateKernel(daisyCl->program, "gradient_8all", &error);
+  daisy->kernel_gAll = clCreateKernel(daisyCl->program, "gradient_all", &error);
 
   if(error){
     fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
     return 1;
   }
   
-  daisy->kernel_f11x = clCreateKernel(daisyCl->program, "convolve_x11", &error);
-  daisy->kernel_f11y = clCreateKernel(daisyCl->program, "convolve_y11", &error);
+  daisy->kernel_fxds = clCreateKernel(daisyCl->program, "convolveDs_x", &error);
+  daisy->kernel_fyds = clCreateKernel(daisyCl->program, "convolveDs_y", &error);
 
   if(error){
     fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
@@ -130,15 +181,10 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   cl_int error;
 
-  daisy->paddedWidth = daisy->width + (ARRAY_PADDING - daisy->width % ARRAY_PADDING) % ARRAY_PADDING;
-  daisy->paddedHeight = daisy->height + (ARRAY_PADDING - daisy->height % ARRAY_PADDING) % ARRAY_PADDING;
-
   float * inputArray = (float*)malloc(sizeof(float) * daisy->paddedWidth * daisy->paddedHeight * 8);
 
   int windowHeight = TR_DATA_WIDTH;
   int windowWidth  = TR_DATA_WIDTH;
-
-  float sigmas[3] = {2.5,5,7.5};
   int lclArrayPaddings[3] = {0,0,8};
 
   int * allPairOffsets[3];
@@ -149,7 +195,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
     int petalsNo = daisy->petalsNo + (smoothingNo==0);
 
-    float * petalOffsets = generatePetalOffsets(sigmas[smoothingNo], daisy->petalsNo, (smoothingNo==0));
+    float * petalOffsets = generatePetalOffsets(daisy->sigmas[smoothingNo], daisy->petalsNo, (smoothingNo==0));
 
     int pairOffsetsLength, actualPairs;
     int * pairOffsets = generateTranspositionOffsets(windowHeight, windowWidth,
@@ -233,25 +279,79 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   int paddedWidth  = daisy->paddedWidth;
   int paddedHeight = daisy->paddedHeight;
 
-  long int memorySize = daisy->gradientsNo * (daisy->smoothingsNo+1) * 
-                        paddedWidth * paddedHeight * sizeof(cl_float);
+  // how much memory will be required to store the temporary output of convolveX for the first layer (the largest layer)
+  long int tempPyramidSize = (daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo) / 
+                              pow(DOWNSAMPLE_RATE / 2, daisy->pyramidLayerSettings[0]->t_downsample);
+  tempPyramidSize = max(tempPyramidSize, 2 * daisy->paddedHeight * daisy->paddedWidth);
 
-  cl_mem massBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
-                                     memorySize, (void*)NULL, &error);
+  // either the non-downsampled gradients plus the first half-downsampled convolution output will be greater
+  long int gradientsPlusTempSize = (daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo) + tempPyramidSize;
+
+  // or the whole pyramid plus the first half-downsampled convolution output,
+  // it will normally be the former except for the case when the convolution outputs happen to not be downsampled enough
+  long int pyramidBufferSize = max(daisy->pyramidLayerOffsets[daisy->smoothingsNo-1] + 
+                                   daisy->pyramidLayerSizes[daisy->smoothingsNo-1] + 
+                                   tempPyramidSize, gradientsPlusTempSize) * sizeof(float);
+
+  cl_mem pyramidBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
+                                        pyramidBufferSize, (void*)NULL, &error);
 
   //oclError("oclDaisy","clCreateBuffer (1)",error);
 
-  //printf("massBuffer size = %ld (%ldMB)\n", memorySize, memorySize / (1024 * 1024));
-  //printf("paddedWidth = %d, paddedHeight = %d\n", paddedWidth, paddedHeight);
+  printf("pyramidBuffer size = %ld (%ldMB)\n", pyramidBufferSize, pyramidBufferSize / (1024 * 1024));
+  printf("tempPyramid size = %ld (%ldMB)\n", tempPyramidSize, tempPyramidSize / (1024 * 1024));
+  printf("paddedWidth = %d, paddedHeight = %d\n", paddedWidth, paddedHeight);
 
-  int filter5Size = 5;
-  float * filter5 = (float*)malloc(sizeof(float)*filter5Size);
-  kutility::gaussian_1d(filter5,filter5Size,0.5,0);
-  int filter7Size = 7;
+  cl_mem * filterBuffers = (cl_mem*) malloc(sizeof(cl_mem) * (daisy->smoothingsNo + 1));
+
+  float denoiseSigma = 0.5;
+  int denoiseSize = (int)((int)floor(denoiseSigma * 5) % 2 ? floor(denoiseSigma * 5) : floor(denoiseSigma * 5) + 1);
+  float * denoiseFilter = (float*)malloc(sizeof(float) * denoiseSize);
+  kutility::gaussian_1d(denoiseFilter,denoiseSize,denoiseSigma,0);
+
+  filterBuffers[0] = clCreateBuffer(daisyCl->context, CL_MEM_READ_ONLY,
+                                    denoiseSize * sizeof(float),
+                                    (void*)NULL, &error);
+
+  clEnqueueWriteBuffer(daisyCl->queue, filterBuffers[0], CL_FALSE,
+                       0, denoiseSize * sizeof(float), (void*)denoiseFilter,
+                       0, NULL, NULL);
+
+  // this does not have any impact on the pyramid layer, since the total sigma reached after the denoising + this new sigma
+  // will be the same as the intended daisy->sigmas[0], but now we will have run a small denoising filter before we take the
+  // gradient on the data
+  daisy->pyramidLayerSettings[0]->sigma = sqrt(pow(daisy->sigmas[0],2) - pow(denoiseSigma,2));
+
+  int * gaussianFilterSizes = (int*) malloc(sizeof(int) * daisy->smoothingsNo);
+  float ** gaussianFilters = (float**) malloc(sizeof(float*) * daisy->smoothingsNo);
+  for(int s = 0; s < daisy->smoothingsNo; s++){
+
+    float sigma = daisy->pyramidLayerSettings[s]->sigma;
+    gaussianFilterSizes[s] = (int)((int)floor(sigma * 5) % 2 ? floor(sigma * 5) : floor(sigma * 5) + 1);
+    gaussianFilters[s] = (float*) malloc(sizeof(float) * gaussianFilterSizes[s]);
+    kutility::gaussian_1d(gaussianFilters[s],gaussianFilterSizes[s],sigma,0);
+
+    filterBuffers[s+1] = clCreateBuffer(daisyCl->context, CL_MEM_READ_ONLY,
+                                        gaussianFilterSizes[s] * sizeof(float),
+                                        (void*)NULL, &error);
+
+    clEnqueueWriteBuffer(daisyCl->queue, filterBuffers[s+1], CL_FALSE,
+                         0, gaussianFilterSizes[s] * sizeof(float), (void*)gaussianFilters[s],
+                         0, NULL, NULL);
+
+    if(1){
+      printf("Displaying gaussian filter %d to reach total pyramid sigma %f with sigma %f\n",s,daisy->pyramidLayerSettings[s]->t_sigma,sigma);
+      for(int i = 0; i < gaussianFilterSizes[s]; i++)
+        printf("%f, ",gaussianFilters[s][i]);
+      printf("\n\n");
+    }
+  }
+
+  //int filter7Size = 7;
   /*float filter7[7] = {0.036633,0.11128,0.21675,
                       0.27068,
                       0.21675,0.11128,0.036633};*/
-  int filter11Size = 11;
+  /*int filter11Size = 11;
   float filter11[11] = {0.007024633,0.02381049,0.06153227,0.1212349,0.1821137,
                         0.2085680,
                         0.1821137,0.1212349,0.06153227,0.02381049,0.007024633};
@@ -264,12 +364,9 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
                         0.03292945,0.04051361,0.04828015,0.05572983,0.06231004,0.06748073,0.07078688,
                         0.07192454,
                         0.07078688,0.06748073,0.06231004,0.05572983,0.04828015,0.04051361,0.03292945,
-                        0.02592504,0.01976996,0.01460304,0.01044798,0.00724056,0.00486031,0.00316014};
+                        0.02592504,0.01976996,0.01460304,0.01044798,0.00724056,0.00486031,0.00316014};*/
 
-  const int filterOffsets[4] = {0, filter7Size, filter7Size + filter11Size,
-                                   filter7Size + filter11Size + filter23Size};
-
-  cl_mem filterBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_ONLY,
+  /*cl_mem filterBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_ONLY,
                                        (filter7Size + filter11Size + filter23Size + filter29Size) * sizeof(float),
                                        (void*)NULL, &error);
 
@@ -284,11 +381,11 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
                        0, NULL, NULL);
   clEnqueueWriteBuffer(daisyCl->queue, filterBuffer, CL_FALSE,
                        filterOffsets[3] * sizeof(float), filter29Size * sizeof(float), (void*)filter29,
-                       0, NULL, NULL);
+                       0, NULL, NULL);*/
 
   //oclError("oclDaisy","clEnqueueWriteBuffer (1)",error);
 
-  short int DEBUG_ALL = 0;
+  short int DEBUG_ALL = 1;
 
   float * testArray;
 
@@ -311,7 +408,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
       inputArray[i * paddedWidth + j] = daisy->array[(daisy->height-1) * daisy->width + j];
   }
 
-  error = clEnqueueWriteBuffer(daisyCl->queue, massBuffer, CL_TRUE,
+  error = clEnqueueWriteBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
                                0, paddedWidth * paddedHeight * sizeof(float),
                                (void*)inputArray,
                                0, NULL, NULL);
@@ -327,8 +424,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   size_t convGroupSize7x[2] = {16,8};
 
   // convolve X - A.0 to A.1
-  clSetKernelArg(daisy->oclPrograms.kernel_f7x, 0, sizeof(massBuffer), (void*)&massBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f7x, 1, sizeof(filterBuffer), (void*)&filterBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f7x, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f7x, 1, sizeof(filterBuffers[0]), (void*)&filterBuffers[0]);
   clSetKernelArg(daisy->oclPrograms.kernel_f7x, 2, sizeof(int), (void*)&(daisy->paddedWidth));
   clSetKernelArg(daisy->oclPrograms.kernel_f7x, 3, sizeof(int), (void*)&(daisy->paddedHeight));
 
@@ -343,7 +440,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   if(DEBUG_ALL){
     // checked verified
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
+    error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
                         paddedWidth * paddedHeight * sizeof(float), 
                         paddedWidth * paddedHeight * sizeof(float), testArray,
                         0, NULL, NULL);
@@ -360,12 +457,12 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
     printf("\n");
   }
 
-  // convolve Y - A.1 to B.0
+  // convolve Y - A.1 to A.0
   size_t convWorkerSize7y[2] = {daisy->paddedWidth,daisy->paddedHeight / 4};
   size_t convGroupSize7y[2] = {16,8};
 
-  clSetKernelArg(daisy->oclPrograms.kernel_f7y, 0, sizeof(massBuffer), (void*)&massBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f7y, 1, sizeof(filterBuffer), (void*)&filterBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f7y, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f7y, 1, sizeof(filterBuffers[0]), (void*)&filterBuffers[0]);
   clSetKernelArg(daisy->oclPrograms.kernel_f7y, 2, sizeof(int), (void*)&(daisy->paddedWidth));
   clSetKernelArg(daisy->oclPrograms.kernel_f7y, 3, sizeof(int), (void*)&(daisy->paddedHeight));
 
@@ -380,18 +477,18 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   if(DEBUG_ALL){
     // checked verified
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
-                        paddedWidth * paddedHeight * 8 * sizeof(float), 
-                        paddedWidth * paddedHeight * sizeof(float), inputArray,
-                        0, NULL, NULL);
+    error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
+                                0, 
+                                paddedWidth * paddedHeight * sizeof(float), inputArray,
+                                0, NULL, NULL);
 
-    printf("\nDenoising Input y: %f",testArray[159+58*paddedWidth]);
+    printf("\nDenoising Input y: %f",testArray[0]);
     for(k = 1; k < 25; k++)
-      printf(", %f", testArray[(58+k)*paddedWidth+159]);
+      printf(", %f", testArray[k*paddedWidth]);
     printf("\n");
-    printf("\nDenoising Output y: %f",inputArray[159+58*paddedWidth]);
+    printf("\nDenoising Output y: %f",inputArray[0]);
     for(k = 1; k < 25; k++)
-      printf(", %f", inputArray[(58+k)*paddedWidth+159]);
+      printf(", %f", inputArray[k*paddedWidth]);
     printf("\n");
   }
 
@@ -399,10 +496,11 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   size_t gradWorkerSize = daisy->paddedWidth * daisy->paddedHeight;
   size_t gradGroupSize = 64;
 
-  // gradient X,Y,all - B.0 to A.0-7
-  clSetKernelArg(daisy->oclPrograms.kernel_gAll, 0, sizeof(massBuffer), (void*)&massBuffer);
+  // gradient X,Y,all - A.0 to B+
+  clSetKernelArg(daisy->oclPrograms.kernel_gAll, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
   clSetKernelArg(daisy->oclPrograms.kernel_gAll, 1, sizeof(int), (void*)&(daisy->paddedWidth));
   clSetKernelArg(daisy->oclPrograms.kernel_gAll, 2, sizeof(int), (void*)&(daisy->paddedHeight));
+  clSetKernelArg(daisy->oclPrograms.kernel_gAll, 3, sizeof(int), (void*)&(tempPyramidSize));
 
   error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_gAll, 1, NULL, 
                                  &gradWorkerSize, &gradGroupSize, 0, 
@@ -414,32 +512,47 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   if(DEBUG_ALL){
 
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
-                        paddedWidth * paddedHeight * sizeof(float), 
-                        paddedWidth * paddedHeight * sizeof(float), testArray,
-                        0, NULL, NULL);
+    error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
+                                tempPyramidSize * sizeof(float), 
+                                paddedWidth * paddedHeight * sizeof(float), testArray,
+                                0, NULL, NULL);
     clFinish(daisyCl->queue);
-    printf("\nBefore Gradient: %f",inputArray[512*paddedWidth+128]);
+    printf("\nBefore Gradient: %f",inputArray[0]);
     for(k = 1; k < 25; k++)
-      printf(", %f", inputArray[512*paddedWidth+128+k]);
-    printf("\nAfter Gradient (X,X+22.5,X+45,Y): %f",testArray[512*paddedWidth+128]);
+      printf(", %f", inputArray[k]);
+    printf("\nAfter Gradient (X,X+22.5,X+45,Y): %f",testArray[0]);
     for(k = 1; k < 25; k++)
-      printf(", %f", testArray[512*paddedWidth+128+k]);
+      printf(", %f", testArray[k]);
     printf("\n");
   }
     
-  // Smooth all to 2.5 - keep at massBuffer section A
+
+  // Smooth all to 2.5 - keep at pyramidBuffer section B
   
-  // convolve X - massBuffer sections: A to B
+/*__kernel void convolveDs_x(__global   float * pyramidArray,
+                           const      int     pddWidth,
+                           const      int     pddHeight,
+                           const      int     srcGlobalOffset, // from [11x,B+],[23x,B],[29x,C]
+                           __constant float * fltArray,
+                           const      int     fltRadius,
+                           const      int     downsampleRate) // downsample in x dimension, should be 1 if no downsample, must be a power of 2*/
+
+  // convolve X - pyramidBuffer sections: B+ to A
   size_t convWorkerSize11x[2] = {daisy->paddedWidth / 4, daisy->paddedHeight * daisy->gradientsNo};
   size_t convGroupSize11x[2] = {16,4};
 
-  clSetKernelArg(daisy->oclPrograms.kernel_f11x, 0, sizeof(massBuffer), (void*)&massBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f11x, 1, sizeof(filterBuffer), (void*)&filterBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f11x, 2, sizeof(int), (void*)&(daisy->paddedWidth));
-  clSetKernelArg(daisy->oclPrograms.kernel_f11x, 3, sizeof(int), (void*)&(daisy->paddedHeight));
+  int filterRadius = gaussianFilterSizes[0] / 2;
+  int filterDownsample = pow(DOWNSAMPLE_RATE / 2,daisy->pyramidLayerSettings[0]->downsample);
 
-  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_f11x, 2, NULL, 
+  clSetKernelArg(daisy->oclPrograms.kernel_fxds, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_fxds, 1, sizeof(int), (void*)&(daisy->paddedWidth));
+  clSetKernelArg(daisy->oclPrograms.kernel_fxds, 2, sizeof(int), (void*)&(daisy->paddedHeight));
+  clSetKernelArg(daisy->oclPrograms.kernel_fxds, 3, sizeof(int), (void*)&tempPyramidSize);
+  clSetKernelArg(daisy->oclPrograms.kernel_fxds, 4, sizeof(filterBuffers[1]), (void*)&(filterBuffers[1]));
+  clSetKernelArg(daisy->oclPrograms.kernel_fxds, 5, sizeof(int), (void*)&filterRadius);
+  clSetKernelArg(daisy->oclPrograms.kernel_fxds, 6, sizeof(int), (void*)&filterDownsample);
+
+  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_fxds, 2, NULL, 
                                  convWorkerSize11x, convGroupSize11x, 0, 
                                  NULL, NULL);
 
@@ -449,32 +562,58 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   if(DEBUG_ALL){
     // checek verified
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
-                        paddedWidth * paddedHeight * 11 * sizeof(float), 
-                        paddedWidth * paddedHeight * sizeof(float), inputArray,
-                        0, NULL, NULL);
-    clFinish(daisyCl->queue);
-    printf("\nBefore Smooth (11x): %f",testArray[(daisy->height-5)*paddedWidth+daisy->width]);
+    for(int g = 0; g < daisy->gradientsNo; g++){
+      error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
+                                  (tempPyramidSize + g * paddedWidth * paddedHeight) * sizeof(float), 
+                                  paddedWidth * paddedHeight * sizeof(float), testArray,
+                                  0, NULL, NULL);
+
+      error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
+                                  g * (paddedWidth / filterDownsample) * paddedHeight * sizeof(float), 
+                                  (paddedWidth / filterDownsample) * paddedHeight * sizeof(float), inputArray,
+                                  0, NULL, NULL);
+      clFinish(daisyCl->queue);
+    
+      //long int verifyConvolutionX(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample){
+      long int issues = verifyConvolutionX(testArray, inputArray, daisy->paddedHeight, daisy->paddedWidth, gaussianFilters[0], gaussianFilterSizes[0], filterDownsample);
+
+      if(issues > 0) printf("convolveDs_x has %ld issues with first smoothing at g=%d\n",issues,g);
+    }
+
+    printf("\nBefore Smooth (11x): %f",testArray[0]);
     for(k = 1; k < 25; k++)
-      printf(", %f", testArray[(daisy->height-5)*paddedWidth+daisy->width+k]);
+      printf(", %f", testArray[k]);
     printf("\n");
     
-    printf("\nAfter Smooth (11x): %f",inputArray[(daisy->height-5)*paddedWidth+daisy->width]);
+    printf("\nAfter Smooth (11x): %f",inputArray[0]);
     for(k = 1; k < 25; k++)
-      printf(", %f", inputArray[(daisy->height-5)*paddedWidth+daisy->width+k]);
+      printf(", %f", inputArray[k]);
     printf("\n");
   }
 
-  // convolve Y - massBuffer sections: B to A
-  size_t convWorkerSize11y[2] = {daisy->paddedWidth, (daisy->paddedHeight * daisy->gradientsNo) / 8};
+  // convolve Y - pyramidBuffer sections: B to A
+  int layerWidth = daisy->paddedWidth / filterDownsample;
+
+  size_t convWorkerSize11y[2] = {layerWidth, (daisy->paddedHeight * daisy->gradientsNo) / 8};
   size_t convGroupSize11y[2] = {16,8};
 
-  clSetKernelArg(daisy->oclPrograms.kernel_f11y, 0, sizeof(massBuffer), (void*)&massBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f11y, 1, sizeof(filterBuffer), (void*)&filterBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f11y, 2, sizeof(int), (void*)&(daisy->paddedWidth));
-  clSetKernelArg(daisy->oclPrograms.kernel_f11y, 3, sizeof(int), (void*)&(daisy->paddedHeight));
 
-  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_f11y, 2, NULL, 
+/*__kernel void convolveDs_y(__global   float * pyramidArray,
+                           const      int     pddWidth, // should be original width / downsampleRate
+                           const      int     pddHeight,
+                           const      int     dstGlobalOffset, // to [13y,B],[23y,C],[29y,D]
+                           __constant float * fltArray,
+                           const      int     fltRadius,
+                           const      int     downsampleRate)*/
+  clSetKernelArg(daisy->oclPrograms.kernel_fyds, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_fyds, 1, sizeof(int), (void*)&layerWidth);
+  clSetKernelArg(daisy->oclPrograms.kernel_fyds, 2, sizeof(int), (void*)&(daisy->paddedHeight));
+  clSetKernelArg(daisy->oclPrograms.kernel_fyds, 3, sizeof(int), (void*)&tempPyramidSize);
+  clSetKernelArg(daisy->oclPrograms.kernel_fyds, 4, sizeof(filterBuffers[0]), (void*)&filterBuffers[0]);
+  clSetKernelArg(daisy->oclPrograms.kernel_fyds, 5, sizeof(int), (void*)&filterRadius);
+  clSetKernelArg(daisy->oclPrograms.kernel_fyds, 6, sizeof(int), (void*)&filterDownsample);
+
+  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_fyds, 2, NULL, 
                                  convWorkerSize11y, convGroupSize11y, 0, 
                                  NULL, NULL);
 
@@ -483,29 +622,43 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   clFinish(daisyCl->queue);
 
   if(DEBUG_ALL){
+    for(int g = 0; g < 1; g++){
+      error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
+                                  g * layerWidth * paddedHeight * sizeof(float), 
+                                  layerWidth * paddedHeight * sizeof(float), testArray,
+                                  0, NULL, NULL);
 
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
-                        paddedWidth * paddedHeight * 7 * sizeof(float), paddedWidth * paddedHeight * sizeof(float), testArray,
-                        0, NULL, NULL);
-    clFinish(daisyCl->queue);
-    printf("\nBefore Smooth (11y): %f",inputArray[200]);
+      error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
+                                  (tempPyramidSize + g * (paddedWidth / filterDownsample) * (paddedHeight / filterDownsample)) * sizeof(float), 
+                                  (paddedWidth / filterDownsample) * (paddedHeight / filterDownsample) * sizeof(float), inputArray,
+                                  0, NULL, NULL);
+      clFinish(daisyCl->queue);
+    
+      //long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample){
+      long int issues = verifyConvolutionY(testArray, inputArray, daisy->paddedHeight, daisy->paddedWidth, gaussianFilters[0], gaussianFilterSizes[0], filterDownsample);
+
+      if(issues > 0) printf("convolveDs_y has %ld issues with first smoothing at g=%d\n",issues,g);
+    }
+    printf("\nBefore Smooth (11y): %f",testArray[0]);
     for(k = 1; k < 25; k++)
-      printf(", %f", inputArray[k*paddedWidth+200]);
+      printf(", %f", testArray[k*layerWidth]);
     printf("\n");
-    printf("\nAfter Smooth (11y): %f",testArray[200]);
+    printf("\nAfter Smooth (11y): %f",inputArray[0]);
     for(k = 1; k < 25; k++)
-      printf(", %f", testArray[k*paddedWidth+200]);
+      printf(", %f", inputArray[k*layerWidth]);
     printf("\n");
   }
 
+  return 0;
+
   // smooth all with size 23 - keep
 
-  // convolve X - massBuffer sections: A to C
+  // convolve X - pyramidBuffer sections: A to C
   size_t convWorkerSize23x[2] = {daisy->paddedWidth / 4, daisy->paddedHeight * daisy->gradientsNo};
   size_t convGroupSize23x[2] = {16,4};
 
-  clSetKernelArg(daisy->oclPrograms.kernel_f23x, 0, sizeof(massBuffer), (void*)&massBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f23x, 1, sizeof(filterBuffer), (void*)&filterBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f23x, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f23x, 1, sizeof(filterBuffers[0]), (void*)&filterBuffers[0]);
   clSetKernelArg(daisy->oclPrograms.kernel_f23x, 2, sizeof(int), (void*)&(daisy->paddedWidth));
   clSetKernelArg(daisy->oclPrograms.kernel_f23x, 3, sizeof(int), (void*)&(daisy->paddedHeight));
 
@@ -519,7 +672,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   if(DEBUG_ALL){
 
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
+    error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
                         paddedWidth * paddedHeight * (8 * 2 + 7) * sizeof(float), 
                         paddedWidth * paddedHeight * sizeof(float), inputArray,
                         0, NULL, NULL);
@@ -539,12 +692,12 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
     printf("\n");
   }
 
-  // convolve Y - massBuffer sections: C to B
+  // convolve Y - pyramidBuffer sections: C to B
   size_t convWorkerSize23y[2] = {daisy->paddedWidth, (daisy->paddedHeight * daisy->gradientsNo) / 4};
   size_t convGroupSize23y[2]  = {16, 16};
 
-  clSetKernelArg(daisy->oclPrograms.kernel_f23y, 0, sizeof(massBuffer), (void*)&massBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f23y, 1, sizeof(filterBuffer), (void*)&filterBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f23y, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f23y, 1, sizeof(filterBuffers[0]), (void*)&filterBuffers[0]);
   clSetKernelArg(daisy->oclPrograms.kernel_f23y, 2, sizeof(int), (void*)&(daisy->paddedWidth));
   clSetKernelArg(daisy->oclPrograms.kernel_f23y, 3, sizeof(int), (void*)&(daisy->paddedHeight));
 
@@ -558,7 +711,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   if(DEBUG_ALL){  
 
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
+    error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
                                 paddedWidth * paddedHeight * (8 + 7) * sizeof(float), 
                                 paddedWidth * paddedHeight * sizeof(float), testArray,
                                 0, NULL, NULL);
@@ -576,12 +729,12 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   // smooth all with size 29 - keep
   
-  // convolve X - massBuffer sections: B to D
+  // convolve X - pyramidBuffer sections: B to D
   size_t convWorkerSize29x[2] = {daisy->paddedWidth / 4, (daisy->paddedHeight * daisy->gradientsNo)};
   size_t convGroupSize29x[2]  = {16, 4};
 
-  clSetKernelArg(daisy->oclPrograms.kernel_f29x, 0, sizeof(massBuffer), (void*)&massBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f29x, 1, sizeof(filterBuffer), (void*)&filterBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f29x, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f29x, 1, sizeof(filterBuffers[0]), (void*)&filterBuffers[0]);
   clSetKernelArg(daisy->oclPrograms.kernel_f29x, 2, sizeof(int), (void*)&(daisy->paddedWidth));
   clSetKernelArg(daisy->oclPrograms.kernel_f29x, 3, sizeof(int), (void*)&(daisy->paddedHeight));
 
@@ -595,7 +748,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   if(DEBUG_ALL){
 
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
+    error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
                         paddedWidth * paddedHeight * (8 * 3 + 7) * sizeof(float), 
                         paddedWidth * paddedHeight * sizeof(float), inputArray,
                         0, NULL, NULL);
@@ -617,12 +770,12 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
     printf("\n");
   }
   
-  // convolve Y - massBuffer sections: D to C
+  // convolve Y - pyramidBuffer sections: D to C
   size_t convWorkerSize29y[2] = {daisy->paddedWidth, (daisy->paddedHeight * daisy->gradientsNo) / 4};
   size_t convGroupSize29y[2]  = {16, 16};
 
-  clSetKernelArg(daisy->oclPrograms.kernel_f29y, 0, sizeof(massBuffer), (void*)&massBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_f29y, 1, sizeof(filterBuffer), (void*)&filterBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f29y, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_f29y, 1, sizeof(filterBuffers[0]), (void*)&filterBuffers[0]);
   clSetKernelArg(daisy->oclPrograms.kernel_f29y, 2, sizeof(int), (void*)&(daisy->paddedWidth));
   clSetKernelArg(daisy->oclPrograms.kernel_f29y, 3, sizeof(int), (void*)&(daisy->paddedHeight));
 
@@ -637,7 +790,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   gettimeofday(&times->endConvGrad,NULL);
 
   if(DEBUG_ALL){
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
+    error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
                         paddedWidth * paddedHeight * (8 * 2 + 7) * sizeof(float), 
                         paddedWidth * paddedHeight * sizeof(float), testArray,
                         0, NULL, NULL);
@@ -662,8 +815,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   gettimeofday(&times->startTransGrad,NULL);
 
-  memorySize = daisy->gradientsNo * daisy->smoothingsNo * 
-               paddedWidth * paddedHeight * sizeof(cl_float);
+  long int memorySize = daisy->gradientsNo * daisy->smoothingsNo * 
+                        paddedWidth * paddedHeight * sizeof(cl_float);
 
   cl_mem transBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
                                       memorySize, (void*)NULL, &error);
@@ -676,7 +829,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   size_t transWorkerSize[2] = {daisy->paddedWidth,daisy->paddedHeight * daisy->smoothingsNo * daisy->gradientsNo};
   size_t transGroupSize[2] = {32,8};
 
-  clSetKernelArg(daisy->oclPrograms.kernel_trans, 0, sizeof(massBuffer), (void*)&massBuffer);
+  clSetKernelArg(daisy->oclPrograms.kernel_trans, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
   clSetKernelArg(daisy->oclPrograms.kernel_trans, 1, sizeof(transBuffer), (void*)&transBuffer);
   clSetKernelArg(daisy->oclPrograms.kernel_trans, 2, sizeof(int), (void*)&(daisy->paddedWidth));
   clSetKernelArg(daisy->oclPrograms.kernel_trans, 3, sizeof(int), (void*)&(daisy->paddedHeight));
@@ -689,7 +842,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   clFinish(daisyCl->queue);
 
-  clReleaseMemObject(massBuffer);
+  clReleaseMemObject(pyramidBuffer);
 
   gettimeofday(&times->endTransGrad,NULL);
 
@@ -883,8 +1036,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
         int pairOffsetsLength = allPairOffsetsLengths[smoothingNo];
         int * pairOffsets = allPairOffsets[smoothingNo];
 
-        int petalsNo = daisy->petalsNo + (smoothingNo==0);
-
         int petalStart = (smoothingNo > 0 ? smoothingNo * daisy->petalsNo + 1 : 0);
 
         //printf("\nPetalsNo = %d\n",petalsNo);
@@ -973,7 +1124,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   clReleaseMemObject(daisyBufferA);
   if(totalSections > 1) clReleaseMemObject(daisyBufferB);
   clReleaseMemObject(transBuffer);
-  clReleaseMemObject(filterBuffer);
+  clReleaseMemObject(filterBuffers[0]);
 
   for(int s = 0; s < daisy->smoothingsNo; s++){
     clReleaseMemObject(allPairOffsetBuffers[s]);
@@ -984,7 +1135,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   if(DEBUG_ALL) free(testArray);
 
-  free(filter5);
   free(memoryEvents);
   free(kernelEvents);
 
@@ -1195,4 +1345,58 @@ int* generateTranspositionOffsets(int windowHeight, int windowWidth,
   return pairedOffsets;
 }
 
+long int verifyConvolutionX(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample){
+
+  long int issues = 0;
+  int limit = 40;
+
+  for(int y = 0; y < height; y++){
+
+    for(int x = 0; x < width; x += downsample){
+
+      float s = .0f;
+      for(int f = -filterSize / 2; f < filterSize / 2 + 1; f++){
+        if(x + f < 0) s += inputData[y * width] * filter[f + filterSize / 2];
+        else if(x + f >= width) s += inputData[y * width + width-1] * filter[f + filterSize / 2];
+        else s += inputData[y * width + x + f] * filter[f + filterSize / 2];
+      }
+
+      if(fabs(outputData[y * (width / downsample) + x / downsample] - s) > 0.0001f){
+        issues++;
+        if(issues < limit)
+          printf("Issue at y,x %d,%d\n",y,x);
+      }
+    }
+
+  }
+  
+  return issues;
+
+}
+long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample){
+
+  long int issues = 0;
+  int limit = 40;
+
+  for(int x = 0; x < width; x++){
+
+    for(int y = 0; y < height; y += downsample){
+
+      float s = .0f;
+      for(int f = -filterSize / 2; f < filterSize / 2 + 1; f++){
+        if(y + f < 0) s += inputData[x] * filter[f + filterSize / 2];
+        else if(y + f >= height) s += inputData[(height-1) * width + x] * filter[f + filterSize / 2];
+        else s += inputData[y * width + x + f] * filter[f + filterSize / 2];
+      }
+
+      if(outputData[(y / downsample) * width + x] - s > 0.0001f)
+        issues++;
+        if(issues < limit)
+          printf("Issue at y,x %d,%d\n",y,x);
+      }
+    }
+
+  return issues;
+
+}
 

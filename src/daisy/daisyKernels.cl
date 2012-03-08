@@ -1,9 +1,11 @@
+#define GRADIENT_NUM 8
+
 #define CONVX_GROUP_SIZE_X 16
 #define CONVX_GROUP_SIZE_Y 8
 #define CONVX_WORKER_STEPS 4
 
-__kernel void convolve_x7(__global   float * massArray,
-                          __constant float  * fltArray,
+__kernel void convolve_x7(__global   float * pyramidArray,
+                          __constant float * fltArray,
                           const      int     pddWidth,
                           const      int     pddHeight)
 {
@@ -16,11 +18,11 @@ __kernel void convolve_x7(__global   float * massArray,
   const int srcOffset = get_global_id(1) * pddWidth + srcOffsetX;
 
   for(int i = 1; i < CONVX_WORKER_STEPS+1; i++)
-    lclArray[ly][i * CONVX_GROUP_SIZE_X + lx] = massArray[srcOffset + i * CONVX_GROUP_SIZE_X];
+    lclArray[ly][i * CONVX_GROUP_SIZE_X + lx] = pyramidArray[srcOffset + i * CONVX_GROUP_SIZE_X];
 
-  lclArray[ly][lx] = (srcOffsetX >= 0 ? massArray[srcOffset]:lclArray[ly][CONVX_GROUP_SIZE_X]);
+  lclArray[ly][lx] = (srcOffsetX >= 0 ? pyramidArray[srcOffset]:lclArray[ly][CONVX_GROUP_SIZE_X]);
 
-  lclArray[ly][lx + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X] = (srcOffsetX + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X < pddWidth ? massArray[srcOffset + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X]:lclArray[ly][(CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X-1]);
+  lclArray[ly][lx + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X] = (srcOffsetX + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X < pddWidth ? pyramidArray[srcOffset + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X]:lclArray[ly][(CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X-1]);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -28,10 +30,10 @@ __kernel void convolve_x7(__global   float * massArray,
     const int dstOffset = pddWidth * pddHeight + srcOffset;
     float s = 0;
 
-    for(int i = lx-2; i < lx+3; i++)
-      s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-lx+2];
+    for(int i = lx-1; i < lx+2; i++)
+      s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-lx+1];
 
-    massArray[dstOffset + w * CONVX_GROUP_SIZE_X] = s;
+    pyramidArray[dstOffset + w * CONVX_GROUP_SIZE_X] = s;
   }
 }
 
@@ -39,7 +41,7 @@ __kernel void convolve_x7(__global   float * massArray,
 #define CONVY_GROUP_SIZE_Y 8
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_y7(__global   float * massArray,
+__kernel void convolve_y7(__global   float * pyramidArray,
                           __constant float * fltArray,
                           const      int     pddWidth,
                           const      int     pddHeight)
@@ -52,39 +54,40 @@ __kernel void convolve_y7(__global   float * massArray,
   const int srcOffset =  srcOffsetY * pddWidth + get_global_id(0) + pddWidth * pddHeight;
 
   for(int i = 1; i < CONVY_WORKER_STEPS+1; i++)
-    lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = massArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
+    lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = pyramidArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
 
-  lclArray[lx][ly] = (srcOffsetY >= 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
+  lclArray[lx][ly] = (srcOffsetY >= 0 ? pyramidArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
 
-  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = (srcOffsetY + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? massArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
+  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = (srcOffsetY + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? pyramidArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
   for(int w = 1; w < CONVY_WORKER_STEPS+1; w++){
-    const int dstOffset = srcOffset + pddWidth * pddHeight * 7;
+    const int dstOffset = srcOffset - pddWidth * pddHeight;
     float s = 0;
 
-    for(int i = ly-2; i < ly+3; i++)
-      s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-ly+2];
+    for(int i = ly-1; i < ly+2; i++)
+      s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-ly+1];
 
-    massArray[dstOffset + w * CONVY_GROUP_SIZE_Y * pddWidth] = s;
+    pyramidArray[dstOffset + w * CONVY_GROUP_SIZE_Y * pddWidth] = s;
   }
 }
 
-__kernel void gradient_8all(__global float * massArray,
-                            const    int     pddWidth,
-                            const    int     pddHeight)
+__kernel void gradient_all(__global float * pyramidArray,
+                           const    int     pddWidth,
+                           const    int     pddHeight,
+                           const    int     dstGlobalOffset)
 {
 
   const int r = get_global_id(0) / pddWidth;
   const int c = get_global_id(0) % pddWidth;
-  const int srcOffset = pddWidth * pddHeight * 8 + r * pddWidth + c;
+  const int srcOffset = r * pddWidth + c;
 
   float4 n;
-  n.x = (c > 0           ? massArray[srcOffset-1]:massArray[srcOffset]);
-  n.y = (r > 0           ? massArray[srcOffset-pddWidth]:massArray[srcOffset]);
-  n.z = (c < pddWidth-1  ? massArray[srcOffset+1]:massArray[srcOffset]);
-  n.w = (r < pddHeight-1 ? massArray[srcOffset+pddWidth]:massArray[srcOffset]);
+  n.x = (c > 0           ? pyramidArray[srcOffset-1]:pyramidArray[srcOffset]);
+  n.y = (r > 0           ? pyramidArray[srcOffset-pddWidth]:pyramidArray[srcOffset]);
+  n.z = (c < pddWidth-1  ? pyramidArray[srcOffset+1]:pyramidArray[srcOffset]);
+  n.w = (r < pddHeight-1 ? pyramidArray[srcOffset+pddWidth]:pyramidArray[srcOffset]);
 
   float8 gradients;
   const float8 angles = (float8)(0.0f, M_PI / 4, M_PI / 2, 3 * (M_PI / 4), M_PI,
@@ -109,65 +112,72 @@ __kernel void gradient_8all(__global float * massArray,
   gradients.s7 = fmax(cos(angles.s7) * n.x + 
                       sin(angles.s7) * n.y, 0.0);
 
-  const int dstOffset = r * pddWidth + c;
+  const int dstOffset = dstGlobalOffset + r * pddWidth + c;
   const int push = pddWidth * pddHeight;
 
-  massArray[dstOffset]        = gradients.s0;
-  massArray[dstOffset+push]   = gradients.s1;
-  massArray[dstOffset+2*push] = gradients.s2;
-  massArray[dstOffset+3*push] = gradients.s3;
-  massArray[dstOffset+4*push] = gradients.s4;
-  massArray[dstOffset+5*push] = gradients.s5;
-  massArray[dstOffset+6*push] = gradients.s6;
-  massArray[dstOffset+7*push] = gradients.s7;
+  pyramidArray[dstOffset]        = gradients.s0;
+  pyramidArray[dstOffset+push]   = gradients.s1;
+  pyramidArray[dstOffset+2*push] = gradients.s2;
+  pyramidArray[dstOffset+3*push] = gradients.s3;
+  pyramidArray[dstOffset+4*push] = gradients.s4;
+  pyramidArray[dstOffset+5*push] = gradients.s5;
+  pyramidArray[dstOffset+6*push] = gradients.s6;
+  pyramidArray[dstOffset+7*push] = gradients.s7;
 }
 
 #define CONVX_GROUP_SIZE_X 16
 #define CONVX_GROUP_SIZE_Y 4
 #define CONVX_WORKER_STEPS 4
 
-__kernel void convolve_x11(__global   float * massArray,
-                           __constant float  * fltArray,
+__kernel void convolveDs_x(__global   float * pyramidArray,
                            const      int     pddWidth,
-                           const      int     pddHeight)
+                           const      int     pddHeight,
+                           const      int     srcGlobalOffset, // from [13x,B+],[23x,B],[29x,C]
+                           __constant float * fltArray,
+                           const      int     fltRadius,
+                           const      int     downsampleRate) // downsample in x dimension, should be 1 if no downsample, must be a power of 2
 {
-  // prepare to...... downsampleeeeeee!!!!!!!!!
+
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
   __local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
 
   const int srcOffsetX = (get_group_id(0) * CONVX_WORKER_STEPS-1) * CONVX_GROUP_SIZE_X + lx;
-  const int srcOffset = get_global_id(1) * pddWidth + srcOffsetX;
+  const int srcOffset = srcGlobalOffset + get_global_id(1) * pddWidth + srcOffsetX;
 
   for(int i = 1; i < CONVX_WORKER_STEPS+1; i++)
-    lclArray[ly][i * CONVX_GROUP_SIZE_X + lx] = massArray[srcOffset + i * CONVX_GROUP_SIZE_X];
+    lclArray[ly][i * CONVX_GROUP_SIZE_X + lx] = pyramidArray[srcOffset + i * CONVX_GROUP_SIZE_X];
 
-  lclArray[ly][lx] = (srcOffsetX >= 0 ? massArray[srcOffset]:lclArray[ly][CONVX_GROUP_SIZE_X]);
+  lclArray[ly][lx] = (srcOffsetX >= 0 ? pyramidArray[srcOffset]:lclArray[ly][CONVX_GROUP_SIZE_X]);
 
-  lclArray[ly][lx + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X] = (srcOffsetX + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X < pddWidth ? massArray[srcOffset + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X]:lclArray[ly][(CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X-1]);
+  lclArray[ly][lx + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X] = (srcOffsetX + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X < pddWidth ? pyramidArray[srcOffset + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X]:lclArray[ly][(CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X-1]);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  fltArray += 7;
+  // if worker local id is greater than the number of elements this group must output
+  if(lx >= (CONVX_GROUP_SIZE_X * CONVX_WORKER_STEPS) / downsampleRate) return; 
 
-  for(int w = 1; w < CONVX_WORKER_STEPS+1; w++){
-    const int dstOffset = pddWidth * pddHeight * 8 + srcOffset;
+  for(int w = 1; w < CONVX_WORKER_STEPS + 1; w += downsampleRate){
+    const int dstOffset = get_global_id(1) * (pddWidth / downsampleRate) + get_group_id(0) * ((CONVX_GROUP_SIZE_X * CONVX_WORKER_STEPS) / downsampleRate) + lx;
     float s = 0;
+    int f = lx * downsampleRate;
+    for(int i = f - fltRadius; i < f + fltRadius + 1; i++)
+      s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-f+fltRadius];
 
-    for(int i = lx-5; i < lx+6; i++)
-      s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-lx+5];
-
-    massArray[dstOffset + w * CONVX_GROUP_SIZE_X] = s;
+    pyramidArray[dstOffset + ((w-1) / downsampleRate) * CONVX_GROUP_SIZE_X] = s;
   }
 }
 
 #define CONVY_GROUP_SIZE_Y 8
 #define CONVY_WORKER_STEPS 8
 
-__kernel void convolve_y11(__global   float * massArray,
-                           __constant float  * fltArray,
-                           const      int     pddWidth,
-                           const      int     pddHeight)
+__kernel void convolveDs_y(__global   float * pyramidArray,
+                           const      int     pddWidth, // should be original width / downsampleRate
+                           const      int     pddHeight,
+                           const      int     dstGlobalOffset, // to [13y,B],[23y,C],[29y,D]
+                           __constant float * fltArray,
+                           const      int     fltRadius,
+                           const      int     downsampleRate)
 {
 
   const int ly = get_local_id(1);
@@ -175,33 +185,34 @@ __kernel void convolve_y11(__global   float * massArray,
   __local float lclArray[CONVY_GROUP_SIZE_X][CONVY_GROUP_SIZE_Y * (CONVY_WORKER_STEPS+2) + 1];
 
   const int srcOffsetY = ((get_group_id(1) * CONVY_WORKER_STEPS-1) * CONVY_GROUP_SIZE_Y + ly);
-  const int srcOffset =  srcOffsetY * pddWidth + get_global_id(0) + pddWidth * pddHeight * 8;
+  const int srcOffset =  srcOffsetY * pddWidth + get_global_id(0);
 
   for(int i = 1; i < CONVY_WORKER_STEPS+1; i++)
-    lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = massArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
+    lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = pyramidArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
 
-  lclArray[lx][ly] = (get_group_id(1) % ((pddHeight / CONVY_WORKER_STEPS) / get_local_size(1)) ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
+  lclArray[lx][ly] = (get_group_id(1) % ((pddHeight / CONVY_WORKER_STEPS) / get_local_size(1)) ? pyramidArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
 
-  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? massArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
+  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? pyramidArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  fltArray += 7;
+  if(get_global_id(1) > 8) return;
 
-  for(int w = 1; w < CONVY_WORKER_STEPS+1; w++){
-    const int dstOffset = srcOffset - pddWidth * pddHeight * 8;
+  for(int w = 1; w < CONVY_WORKER_STEPS + 1; w += downsampleRate){
+    const int dstOffset = dstGlobalOffset + (get_group_id(1) * ((CONVY_GROUP_SIZE_Y * CONVY_WORKER_STEPS) / downsampleRate) + ly) * pddWidth + lx;
     float s = 0;
+    int f = ly * downsampleRate;
+    for(int i = f - fltRadius; i < f + fltRadius + 1; i++)
+      s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-f+fltRadius];
 
-    for(int i = ly-5; i < ly+6; i++)
-      s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-ly+5];
-
-    massArray[dstOffset + w * CONVY_GROUP_SIZE_Y * pddWidth] = s;
+    pyramidArray[dstOffset + ((w-1) / downsampleRate) * CONVY_GROUP_SIZE_Y * pddWidth] = dstOffset;
+    return;
   }
 }
 
 //#define CONVX_WORKER_STEPS 8
 
-__kernel void convolve_x23(__global   float * massArray,
+__kernel void convolve_x23(__global   float * pyramidArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -215,11 +226,11 @@ __kernel void convolve_x23(__global   float * massArray,
   const int srcOffset = get_global_id(1) * pddWidth + srcOffsetX;
 
   for(int i = 1; i < CONVX_WORKER_STEPS+1; i++)
-    lclArray[ly][i * CONVX_GROUP_SIZE_X + lx] = massArray[srcOffset + i * CONVX_GROUP_SIZE_X];
+    lclArray[ly][i * CONVX_GROUP_SIZE_X + lx] = pyramidArray[srcOffset + i * CONVX_GROUP_SIZE_X];
 
-  lclArray[ly][lx] = (srcOffsetX >= 0 ? massArray[srcOffset]:lclArray[ly][CONVX_GROUP_SIZE_X]);
+  lclArray[ly][lx] = (srcOffsetX >= 0 ? pyramidArray[srcOffset]:lclArray[ly][CONVX_GROUP_SIZE_X]);
 
-  lclArray[ly][lx + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X] = (srcOffsetX + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X < pddWidth ? massArray[srcOffset + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X]:lclArray[ly][(CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X-1]);
+  lclArray[ly][lx + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X] = (srcOffsetX + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X < pddWidth ? pyramidArray[srcOffset + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X]:lclArray[ly][(CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X-1]);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -232,14 +243,14 @@ __kernel void convolve_x23(__global   float * massArray,
     for(int i = lx-11; i < lx+12; i++)
       s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-lx+11];
 
-    massArray[dstOffset + w * CONVX_GROUP_SIZE_X] = s;
+    pyramidArray[dstOffset + w * CONVX_GROUP_SIZE_X] = s;
   }
 }
 
 #define CONVY_GROUP_SIZE_Y 16
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_y23(__global   float * massArray,
+__kernel void convolve_y23(__global   float * pyramidArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -253,11 +264,11 @@ __kernel void convolve_y23(__global   float * massArray,
   const int srcOffset =  srcOffsetY * pddWidth + get_global_id(0) + pddWidth * pddHeight * 8 * 2;
 
   for(int i = 1; i < CONVY_WORKER_STEPS+1; i++)
-    lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = massArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
+    lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = pyramidArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
 
-  lclArray[lx][ly] = (get_group_id(1) % ((pddHeight / CONVY_WORKER_STEPS) / get_local_size(1)) > 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
+  lclArray[lx][ly] = (get_group_id(1) % ((pddHeight / CONVY_WORKER_STEPS) / get_local_size(1)) > 0 ? pyramidArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
 
-  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? massArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
+  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? pyramidArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -270,13 +281,13 @@ __kernel void convolve_y23(__global   float * massArray,
     for(int i = ly-11; i < ly+12; i++)
       s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-ly+11];
 
-    massArray[dstOffset + w * CONVY_GROUP_SIZE_Y * pddWidth] = s;
+    pyramidArray[dstOffset + w * CONVY_GROUP_SIZE_Y * pddWidth] = s;
   }
 }
 
 //#define CONVX_WORKER_STEPS 8
 
-__kernel void convolve_x29(__global   float * massArray,
+__kernel void convolve_x29(__global   float * pyramidArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -290,11 +301,11 @@ __kernel void convolve_x29(__global   float * massArray,
   const int srcOffset = get_global_id(1) * pddWidth + srcOffsetX + pddWidth * pddHeight * 8;
 
   for(int i = 1; i < CONVX_WORKER_STEPS+1; i++)
-    lclArray[ly][i * CONVX_GROUP_SIZE_X + lx] = massArray[srcOffset + i * CONVX_GROUP_SIZE_X];
+    lclArray[ly][i * CONVX_GROUP_SIZE_X + lx] = pyramidArray[srcOffset + i * CONVX_GROUP_SIZE_X];
 
-  lclArray[ly][lx] = (srcOffsetX >= 0 ? massArray[srcOffset]:lclArray[ly][CONVX_GROUP_SIZE_X]);
+  lclArray[ly][lx] = (srcOffsetX >= 0 ? pyramidArray[srcOffset]:lclArray[ly][CONVX_GROUP_SIZE_X]);
 
-  lclArray[ly][lx + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X] = (srcOffsetX + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X < pddWidth ? massArray[srcOffset + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X]:lclArray[ly][(CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X-1]);
+  lclArray[ly][lx + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X] = (srcOffsetX + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X < pddWidth ? pyramidArray[srcOffset + (CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X]:lclArray[ly][(CONVX_WORKER_STEPS+1) * CONVX_GROUP_SIZE_X-1]);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -307,13 +318,13 @@ __kernel void convolve_x29(__global   float * massArray,
     for(int i = lx-14+1; i < lx+15-1; i++)
       s += lclArray[ly][w * CONVX_GROUP_SIZE_X + i] * fltArray[i-lx+14-1];
 
-    massArray[dstOffset + w * CONVX_GROUP_SIZE_X] = s;
+    pyramidArray[dstOffset + w * CONVX_GROUP_SIZE_X] = s;
   }
 }
 
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_y29(__global   float * massArray,
+__kernel void convolve_y29(__global   float * pyramidArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -327,11 +338,11 @@ __kernel void convolve_y29(__global   float * massArray,
   const int srcOffset =  srcOffsetY * pddWidth + get_global_id(0) + pddWidth * pddHeight * 8 * 3;
 
   for(int i = 1; i < CONVY_WORKER_STEPS+1; i++)
-    lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = massArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
+    lclArray[lx][i * CONVY_GROUP_SIZE_Y + ly] = pyramidArray[srcOffset + i * CONVY_GROUP_SIZE_Y * pddWidth];
 
-  lclArray[lx][ly] = (get_group_id(1) % ((pddHeight / CONVY_WORKER_STEPS) / get_local_size(1)) > 0 ? massArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
+  lclArray[lx][ly] = (get_group_id(1) % ((pddHeight / CONVY_WORKER_STEPS) / get_local_size(1)) > 0 ? pyramidArray[srcOffset]:lclArray[lx][CONVY_GROUP_SIZE_Y]);
 
-  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? massArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
+  lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y + ly] = ((srcOffsetY % pddHeight) + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y < pddHeight ? pyramidArray[srcOffset + (CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y * pddWidth]:lclArray[lx][(CONVY_WORKER_STEPS+1) * CONVY_GROUP_SIZE_Y-1]);
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
@@ -344,11 +355,10 @@ __kernel void convolve_y29(__global   float * massArray,
     for(int i = ly-14+1; i < ly+15-1; i++)
       s += lclArray[lx][w * CONVY_GROUP_SIZE_Y + i] * fltArray[i-ly+14-1];
 
-    massArray[dstOffset + w * CONVY_GROUP_SIZE_Y * pddWidth] = s;
+    pyramidArray[dstOffset + w * CONVY_GROUP_SIZE_Y * pddWidth] = s;
   }
 }
 
-#define GRADIENT_NUM 8
 #define TOTAL_PETALS_NO 25
 #define REGION_PETALS_NO 8
 #define TRANS_GROUP_SIZE_X 32
