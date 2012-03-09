@@ -408,8 +408,8 @@ __kernel void transposeDaisy(__global   float * srcArray,
                              const      int     srcWidth,
                              const      int     srcHeight,
                              const      int     srcGlobalOffset,
-                             const      int     transArrayLength,
-                             const      int     lclArrayPadding) // either 0 or 8
+                             const      int     transArrayLength)
+//                             const      int     lclArrayPadding) // either 0 or 8
 {
 
   const int gx = get_global_id(0) - TRANSD_DATA_WIDTH; 
@@ -437,7 +437,7 @@ __kernel void transposeDaisy(__global   float * srcArray,
     const int stepsPerWorker = 8;
 
     for(int i = 0; i < stepsPerWorker; i++){
-      lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENT_NUM + lclArrayPadding)      // local Y
+      lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENT_NUM)      // local Y
                 + get_local_size(0) * i + lx] =                               // local X
                                                 0;                            // outside border
     }
@@ -446,7 +446,7 @@ __kernel void transposeDaisy(__global   float * srcArray,
     const int stepsPerWorker = 8;
 
     for(int i = 0; i < stepsPerWorker; i++){
-      lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENT_NUM + lclArrayPadding)        // local Y
+      lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENT_NUM)        // local Y
                 + get_local_size(0) * i + lx] =                                 // local X
           srcArray[srcGlobalOffset + gy * srcWidth * GRADIENT_NUM +             // global offset + global Y
             ((gx / get_local_size(0)) * stepsPerWorker + i) * get_local_size(0) // global X
@@ -465,7 +465,8 @@ __kernel void transposeDaisy(__global   float * srcArray,
   const int topLeftY = (get_group_id(1)-1) * TRANSD_DATA_WIDTH;
   const int topLeftX = (get_group_id(0)-1) * TRANSD_DATA_WIDTH;
 
-  const int dstGroupOffset = (topLeftY * srcWidth + topLeftX) * GRADIENT_NUM * TOTAL_PETALS_NO;
+  //const int dstGroupOffset = (topLeftY * srcWidth + topLeftX) * GRADIENT_NUM * TOTAL_PETALS_NO;
+  dstArray += (topLeftY * srcWidth + topLeftX) * GRADIENT_NUM * TOTAL_PETALS_NO;
 
   const int petalStart = ((srcGlobalOffset / (srcWidth * GRADIENT_NUM)) / srcHeight) * REGION_PETALS_NO + (srcGlobalOffset > 0);
 
@@ -487,11 +488,10 @@ __kernel void transposeDaisy(__global   float * srcArray,
     {     }
     else if(fromP2 != TRANSD_PAIRS_SINGLE_ONLY || (lx < 8)){
       const int intraHalfWarpOffset = (lx >= 8) * (fromP2-fromP1);
-      dstArray[dstGroupOffset
-               + (toOffsetY * srcWidth + toOffsetX) * GRADIENT_NUM * TOTAL_PETALS_NO
+      dstArray[(toOffsetY * srcWidth + toOffsetX) * GRADIENT_NUM * TOTAL_PETALS_NO
                + (petalStart + petalNo) * GRADIENT_NUM + lx] =
 
-        lclArray[((fromP1+intraHalfWarpOffset) / TRANSD_DATA_WIDTH) * (TRANSD_DATA_WIDTH * GRADIENT_NUM + lclArrayPadding) 
+        lclArray[((fromP1+intraHalfWarpOffset) / TRANSD_DATA_WIDTH) * (TRANSD_DATA_WIDTH * GRADIENT_NUM) 
                + ((fromP1+intraHalfWarpOffset) % TRANSD_DATA_WIDTH) * GRADIENT_NUM + lx % 8];
     }
   }

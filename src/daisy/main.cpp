@@ -36,7 +36,7 @@ int main( int argc, char **argv  )
     double start,end,diff;
 
     time_params times;
-    times.measureDeviceHostTransfers = 0;
+    times.measureDeviceHostTransfers = 1;
 
     initOcl(daisyPrograms,daisyCl);
 

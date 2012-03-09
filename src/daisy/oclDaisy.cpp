@@ -770,7 +770,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
     }
 
     cl_mem daisyBuffer = (!resourceContext ? daisyBufferA : daisyBufferB);
-
+    //error = clFinish(daisyCl->queue);
+    //gettimeofday(&times->startConvGrad,NULL);
     for(int smoothingNo = 0; smoothingNo < daisy->smoothingsNo; smoothingNo++){
 
       int pairOffsetsLength = allPairOffsetsLengths[smoothingNo];
@@ -787,7 +788,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 5, sizeof(int), (void*)&(daisy->paddedHeight));
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 6, sizeof(int), (void*)&(srcGlobalOffset));
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 7, sizeof(int), (void*)&(pairOffsetsLength));
-      clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&(lclArrayPaddings[smoothingNo]));
+      //clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&(lclArrayPaddings[smoothingNo]));
 
       error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_transd, 2,
                                      daisyWorkerOffsets, daisyWorkerSize, daisyGroupSize,
@@ -798,6 +799,13 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
       //oclError("oclDaisy","clEnqueueNDRangeKernel (daisy block)",error);
 
     }
+  /*error = clFinish(daisyCl->queue);
+    gettimeofday(&times->endConvGrad,NULL);
+
+  times->startt = times->startConvGrad.tv_sec+(times->startConvGrad.tv_usec/1000000.0);
+  times->endt = times->endConvGrad.tv_sec+(times->endConvGrad.tv_usec/1000000.0);
+  times->difft = times->endt-times->startt;
+  printf("\nblock: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*times->difft));*/
 
 #ifdef DAISY_HOST_TRANSFER
     int y;
