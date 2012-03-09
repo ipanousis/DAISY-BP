@@ -30,6 +30,8 @@ DAISY
     numbers of features such as <=100000 (100k being huge for any other implementation found) this time keeps at (assuming linearly) <=14.5 ms; 
     which is way way faster than any other detector+descriptor extractor found for the GPU or not, even for SURF. (set of bookmarks on laptop)
 
+  - still need to find SIFT/SURF dense computation times done on the GPU though.
+
 *downsampling with higher sigmas
  - think this through
  - how the blurr + downsample will happen
