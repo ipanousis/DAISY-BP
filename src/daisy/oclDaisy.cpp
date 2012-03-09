@@ -799,7 +799,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
       //oclError("oclDaisy","clEnqueueNDRangeKernel (daisy block)",error);
 
     }
-  /*error = clFinish(daisyCl->queue);
+/*  error = clFinish(daisyCl->queue);
     gettimeofday(&times->endConvGrad,NULL);
 
   times->startt = times->startConvGrad.tv_sec+(times->startConvGrad.tv_usec/1000000.0);

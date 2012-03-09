@@ -490,7 +490,6 @@ __kernel void transposeDaisy(__global   float * srcArray,
       const int intraHalfWarpOffset = (lx >= 8) * (fromP2-fromP1);
       dstArray[(toOffsetY * srcWidth + toOffsetX) * GRADIENT_NUM * TOTAL_PETALS_NO
                + (petalStart + petalNo) * GRADIENT_NUM + lx] =
-
         lclArray[((fromP1+intraHalfWarpOffset) / TRANSD_DATA_WIDTH) * (TRANSD_DATA_WIDTH * GRADIENT_NUM) 
                + ((fromP1+intraHalfWarpOffset) % TRANSD_DATA_WIDTH) * GRADIENT_NUM + lx % 8];
     }
