@@ -29,7 +29,9 @@ int main( int argc, char **argv  )
     
     ocl_constructs * daisyCl = newOclConstructs(0,0,0);
     ocl_daisy_programs * daisyPrograms = (ocl_daisy_programs*)malloc(sizeof(ocl_daisy_programs));
-    daisy_params * daisy = newDaisyParams(srcArray, height, width, 8, 8, 3);
+
+    float sigmas[3] = {2.5,5,7.5};
+    daisy_params * daisy = newDaisyParams(srcArray, height, width, 8, 8, 3);//, sigmas);
 
     double start,end,diff;
 
@@ -82,27 +84,38 @@ int main( int argc, char **argv  )
 
     FILE * csvOut = fopen(csvOutName,"w");
 
-    int startWidth = 1024+128;
-    //int startHeight = 128;
-    int incrementWidth = 128;
-    //int incrementHeight = 128;
-    int finalWidth = 1536;
-    //int finalHeight = 1536;
+    /* Standard ranges QVGA,VGA,SVGA,XGA,SXGA,SXGA+,UXGA,QXGA*/
+    int heights[8] = {320,640,800,1024,1280,1400,1600,2048};
+    int widths[8] = {240,480,600,768,1024,1050,1200,1536};
+    int total = 8;
+
+    /* Without transfer ranges */
+    /*int heights[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
+    int widths[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
+    int total = 12;*/
+    
+    /* With transfer ranges */
+    /*int heights[4] = {128,256,384,512};//,640,768,896,1024,1152,1280,1408,1536};
+    int widths[4] = {128,256,384,512};//,640,768,896,1024,1152,1280,1408,1536};
+    int total = 4;//12;*/
 
     // allocate the memory
-    unsigned char * array = (unsigned char *)malloc(sizeof(unsigned char) * finalWidth * finalWidth);
+    unsigned char * array = (unsigned char *)malloc(sizeof(unsigned char) * heights[total-1] * widths[total-1]);
 
     // generate random value input
-    for(int i = 0; i < finalWidth * finalWidth; i++)
+    for(int i = 0; i < heights[total-1]*widths[total-1]; i++)
       array[i] = i % 255;
 
     fprintf(csvOut,"height,width,convgrad,transA,transB,transBhost,whole,wholestd,dataTransfer,iterations,success\n");
 
     char* templateRow = "%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d\n";
 
-    for(int width = startWidth; width < finalWidth + incrementWidth; width+=incrementWidth){
+    for(int w = 0; w < total; w++){
 
-      printf("%dx%d\n",width,width);
+      int width = widths[w];
+      int height = heights[w];
+
+      printf("%dx%d\n",height,width);
 
       int iterations = 25;
       int success = 0;
@@ -116,9 +129,9 @@ int main( int argc, char **argv  )
       double t_transBhost = 0;
       double t_whole = 0;
 
-      times.measureDeviceHostTransfers = 1;
+      times.measureDeviceHostTransfers = 0;
 
-      daisy = newDaisyParams(array, width, width, 8, 8, 3);
+      daisy = newDaisyParams(array, height, width, 8, 8, 3);//, NULL);
       daisy->oclPrograms = *daisyPrograms;
 
       for(int i = 0; i < iterations; i++){
@@ -145,47 +158,8 @@ int main( int argc, char **argv  )
 
       double wholeStd = getStd(wholeTimes,iterations);
 
-      fprintf(csvOut, templateRow, width, width, t_convGrad, t_transA, t_transB, t_transBhost, t_whole, wholeStd,
+      fprintf(csvOut, templateRow, height, width, t_convGrad, t_transA, t_transB, t_transBhost, t_whole, wholeStd,
                       times.measureDeviceHostTransfers, iterations, success);
-
-      if(width == finalWidth) break;
-
-      daisy = newDaisyParams(array, width + incrementWidth, width, 8, 8, 3);
-      daisy->oclPrograms = *daisyPrograms;
-
-      t_convGrad = 0;
-      t_transA = 0;
-      t_transB = 0;
-      t_transBhost = 0;
-      t_whole = 0;
-
-      for(int i = 0; i < iterations; i++){
-      
-        success |= oclDaisy(daisy, daisyCl, &times);
-
-        t_convGrad += timeDiff(times.startConvGrad, times.endConvGrad);
-        t_transA   += timeDiff(times.startTransGrad, times.endTransGrad);
-        if(times.measureDeviceHostTransfers)
-          t_transBhost += timeDiff(times.startTransDaisy, times.endTransDaisy);
-        else
-          t_transB += timeDiff(times.startTransDaisy, times.endTransDaisy);
-
-        wholeTimes[i] = timeDiff(times.startFull, times.endFull);
-        t_whole += wholeTimes[i];
-      }
-
-      t_convGrad    /= iterations;
-      t_transA      /= iterations;
-      t_transBhost  /= iterations;
-      t_transB      /= iterations;
-      t_whole       /= iterations;
-      
-      wholeStd = getStd(wholeTimes,iterations);
-
-      fprintf(csvOut, templateRow, width + incrementWidth, width, t_convGrad, t_transA, t_transB, t_transBhost, t_whole, wholeStd,
-                      times.measureDeviceHostTransfers, iterations, success);
-
-      printf("wholestd = %.4f\n",wholeStd);
 
     }
     
