@@ -5,7 +5,6 @@ DAISY
 
 *functionality
  - demonstrate;
-   - get a pair of images with different perspectives/lighting and show descriptor do its thing with a few matches (these images can represent the capability/purpose of the descriptor)
 
  - performance, need a set of graphs/tables with the standard resolutions (320x240,640x480,etc...);
    - a table with time measurements per operation along those resolutions + speed(hz)
@@ -14,7 +13,7 @@ DAISY
 
  - look at SIFT on GPU papers to see verification or benchmarking metrics/methods
 
- - performance, need a set of graphs/tables with the standard resolutions (320x240,640x480,etc...);
+ - get a pair of images with different perspectives/lighting and show descriptor do its thing with a few matches (these images can represent the capability/purpose of the descriptor)
 
  (**big bracket** ie leave for another time)
    (((- other GPU implementations think they are fast with feature detection but in a dense computation
