@@ -481,12 +481,12 @@ __kernel void transposeDaisy(__global   float * srcArray,
     const int toOffsetY = floor(toOffset / (float) TRANSD_PAIRS_OFFSET_WIDTH);
     const int toOffsetX = toOffset - toOffsetY * TRANSD_PAIRS_OFFSET_WIDTH - TRANSD_PAIRS_OFFSET_WIDTH/2;
 
-    const int intraHalfWarpOffset = (lx >= 8) * (fromP2-fromP1);
 
     if(topLeftY+toOffsetY < 0 || topLeftY+toOffsetY >= blockHeight
     || topLeftX+toOffsetX < 0 || topLeftX+toOffsetX >= srcWidth)
     {     }
     else if(fromP2 != TRANSD_PAIRS_SINGLE_ONLY || (lx < 8)){
+      const int intraHalfWarpOffset = (lx >= 8) * (fromP2-fromP1);
       dstArray[dstGroupOffset
                + (toOffsetY * srcWidth + toOffsetX) * GRADIENT_NUM * TOTAL_PETALS_NO
                + (petalStart + petalNo) * GRADIENT_NUM + lx] =
