@@ -29,6 +29,12 @@ DAISY
     numbers of features such as <=100000 (100k being huge for any other implementation found) this time keeps at (assuming linearly) <=14.5 ms; 
     which is way way faster than any other detector+descriptor extractor found for the GPU or not, even for SURF. (set of bookmarks on laptop)
 
+  -->Tested the impact of the local read + global write in the transposeDaisy kernel. The major times are held by the global write, a quarter of the slowness is due to misaligned addresses due to not all the petals that are being written are aligned to 64-bytes. But new GPUs by nvidia managed to make coalesced writes even with misaligned addresses as long as they are in the same 64-byte/128-byte segment and by consecutive workers. Some also dont care if the workers are writing consecutively or not..
+  -->The times for the transposeDaisy kernel sub-operations are;
+     - 2ms for the global read of (512+32)x(512+32)x8x3 floats coalesced read 3551232000 (13GB/sec)
+     - 25ms for global write of 512x512x200 floats in a coalesced(?) fashion  2097152000 (8GB/sec)
+     - 35ms for global write of 512x512x200 floats in a consecutive range of addresses but misaligned (5.6GB/sec)
+
   - still need to find SIFT/SURF dense computation times done on the GPU though.
 
 *downsampling with higher sigmas
