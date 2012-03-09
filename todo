@@ -14,6 +14,22 @@ DAISY
 
  - look at SIFT on GPU papers to see verification or benchmarking metrics/methods
 
+ - performance, need a set of graphs/tables with the standard resolutions (320x240,640x480,etc...);
+
+ (**big bracket** ie leave for another time)
+   (((- other GPU implementations think they are fast with feature detection but in a dense computation
+      they would slug to very slow speeds... apart from extrapolating their performance and comparing
+      what they ''would'' perform if they were used densely another way to compare could be;
+      1) write a kernel function on GPU to compute descriptors on-the-fly from the un-transposed data (transA but not transB)
+          and that should be pretty fast, and then an arbitrary number of descriptors could be requested to demonstrate the speed
+      2) have the ability to give a list of image locations to compute descriptors for to transB kernel)))
+  BUT INSTEAD;
+  - using the simple method just now tested of timing the global reads and then including the actual transposition + writes
+    and seeing how long the reads take we can see clearly that the majority of the time the kernel takes to run depends directly on 
+    the number of output descriptors and each descriptor takes time 0.000000145 seconds which means that when in the region of low
+    numbers of features such as <=100000 (100k being huge for any other implementation found) this time keeps at (assuming linearly) <=14.5 ms; 
+    which is way way faster than any other detector+descriptor extractor found for the GPU or not, even for SURF. (set of bookmarks on laptop)
+
 *downsampling with higher sigmas
  - think this through
  - how the blurr + downsample will happen
@@ -24,17 +40,12 @@ DAISY
 
  - properly measure CPU version with 1 core and 8 cores in the same range of inputs as GPU (done)
  - re-measure everything with standard deviation included (done)
+
  - test program on nvidia card WITH CKE and CC overlap!!!!! jeremy's card opportunity no miss! 
     run the regular set of inputs there with the existing code and pop out the measures! 
     (in theory should achieve upto half the time in transB+transfer and maybe a tiny bit faster 
       if the CKE helps between the smoothings!)
- - performance, need a set of graphs/tables with the standard resolutions (320x240,640x480,etc...);
-   - other GPU implementations think they are fast with feature detection but in a dense computation
-      they would slug to very slow speeds... apart from extrapolating their performance and comparing
-      what they ''would'' perform if they were used densely another way to compare could be;
-      1) write a kernel function on GPU to compute descriptors on-the-fly from the un-transposed data (transA but not transB)
-          and that should be pretty fast, and then an arbitrary number of descriptors could be requested to demonstrate the speed
-      2) have the ability to give a list of image locations to compute descriptors for to transB kernel
+
  - validate output;
    - percentage of max difference between 2 CPUs and between 2 GPUs (done)
    - percentage of difference between CPU and GPU descriptors in one image (done)
