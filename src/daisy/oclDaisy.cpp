@@ -969,12 +969,15 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   // don't unmap the pinned memory if there was only one block
   //if(totalSections > 1){
 
-  error = clEnqueueUnmapMemObject(daisyCl->queue, hostPinnedDaisyDescriptors, daisyDescriptorsSection, 0, NULL, NULL);	
+  // Uncomment when calling oclDaisy multiple times
+  //error = clEnqueueUnmapMemObject(daisyCl->queue, hostPinnedDaisyDescriptors, daisyDescriptorsSection, 0, NULL, NULL);	
+
     //oclError("oclDaisy","clEnqueueUnmapMemObject (hostPinnedSection)",error);
   //free(daisyDescriptorsSection);
   //}
 
-  clReleaseMemObject(hostPinnedDaisyDescriptors);
+  // Uncomment when calling oclDaisy multiple times
+  //clReleaseMemObject(hostPinnedDaisyDescriptors);
 
 #endif
 

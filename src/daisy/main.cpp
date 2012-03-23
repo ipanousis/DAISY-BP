@@ -49,12 +49,12 @@ int main( int argc, char **argv  )
 
     string binaryfile = filename;
     binaryfile += ".bdaisy";
-    //kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+    kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
 
     gettimeofday(&endTime,NULL);
 
     free(daisy->array);
-
+    printf("padded dimensions: %dx%d\n",daisy->paddedHeight,daisy->paddedWidth);
     start = startTime.tv_sec+(startTime.tv_usec/1000000.0);
     end = endTime.tv_sec+(endTime.tv_usec/1000000.0);
     diff = end-start;
