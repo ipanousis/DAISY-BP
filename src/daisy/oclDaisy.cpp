@@ -4,6 +4,7 @@
 
 long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
 long int verifyConvolutionX(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
+long int verifyTransposeGradientsPartialNorm(float * inputData, float * outputData, int width, int height, int gradientsNo);
 
 void generatePyramidSettings(daisy_params * params);
 
@@ -20,6 +21,9 @@ int * generateTranspositionOffsets(int, int, float*, int, int*, int*);
 #define TR_DATA_WIDTH 16
 #define TR_PAIRS_SINGLE_ONLY -999
 #define TR_PAIRS_OFFSET_WIDTH 1000
+
+// Verify all intermediate outputs
+//#define DEBUG_ALL
 
 pyramid_layer_set * newPyramidLayerSetting(float sigma, float newTotalSigma, int prevTotalDownsample){
 
@@ -129,22 +133,6 @@ int initOcl(ocl_daisy_programs * daisy, ocl_constructs * daisyCl){
   
   daisy->kernel_fxds = clCreateKernel(daisyCl->program, "convolveDs_x", &error);
   daisy->kernel_fyds = clCreateKernel(daisyCl->program, "convolveDs_y", &error);
-
-  if(error){
-    fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
-    return 1;
-  }
-  
-  daisy->kernel_f23x = clCreateKernel(daisyCl->program, "convolve_x23", &error);
-  daisy->kernel_f23y = clCreateKernel(daisyCl->program, "convolve_y23", &error);
-
-  if(error){
-    fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
-    return 1;
-  }
-  
-  daisy->kernel_f29x = clCreateKernel(daisyCl->program, "convolve_x29", &error);
-  daisy->kernel_f29y = clCreateKernel(daisyCl->program, "convolve_y29", &error);
 
   if(error){
     fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
@@ -349,13 +337,10 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   oclError("oclDaisy","clEnqueueWriteBuffer (1)",error);
 
-  // Check all intermediate outputs
-  #define DEBUG_ALL 0
-
-  float * testArray;
 
 #ifdef DEBUG_ALL
-    testArray = (float*)malloc(sizeof(float) * paddedWidth * 200 * 16);
+  float * testArray;
+  testArray = (float*)malloc(sizeof(float) * paddedWidth * 200 * 16);
 #endif
 
   // Pad edges of input array for i) to fit the workgroup size ii) convolution halo - resample nearest pixel
@@ -604,6 +589,79 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   }
 
+  // A) transpose pyramid from SxGxHxW to SxHxWxG
+
+  gettimeofday(&times->startTransGrad,NULL);
+
+  long int memorySize = (daisy->pyramidLayerOffsets[daisy->smoothingsNo-1] + 
+                         daisy->pyramidLayerSizes[daisy->smoothingsNo-1]) * sizeof(float);
+
+  cl_mem transBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
+                                      memorySize, (void*)NULL, &error);
+
+  oclError("oclDaisy","clCreateBuffer (3)",error);
+
+  printf("\ntransBuffer size = %ld (%ldMB)\n",memorySize,memorySize/(1024*1024));
+
+
+  for(int layer = 0; layer < daisy->smoothingsNo; layer++){
+    
+    int totalDownsample = pow(DOWNSAMPLE_RATE / 2, daisy->pyramidLayerSettings[layer]->t_downsample);
+    int layerWidth = daisy->paddedWidth / totalDownsample;
+    int layerHeight = daisy->paddedHeight / totalDownsample;
+
+    size_t transWorkerSize[2] = {layerWidth, layerHeight * daisy->gradientsNo};
+    size_t transGroupSize[2] = {32,8};
+
+    int pyramidLayerOffset = daisy->pyramidLayerOffsets[layer];
+
+    int srcOffset = tempPyramidSize + pyramidLayerOffset;
+    int dstOffset = pyramidLayerOffset;
+
+    printf("Layer Size HxW = %dx%d\n",layerHeight,layerWidth);
+
+    clSetKernelArg(daisy->oclPrograms.kernel_trans, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
+    clSetKernelArg(daisy->oclPrograms.kernel_trans, 1, sizeof(transBuffer), (void*)&transBuffer);
+    clSetKernelArg(daisy->oclPrograms.kernel_trans, 2, sizeof(int), (void*)&layerWidth);
+    clSetKernelArg(daisy->oclPrograms.kernel_trans, 3, sizeof(int), (void*)&layerHeight);
+    clSetKernelArg(daisy->oclPrograms.kernel_trans, 4, sizeof(int), (void*)&srcOffset);
+    clSetKernelArg(daisy->oclPrograms.kernel_trans, 5, sizeof(int), (void*)&dstOffset);
+
+    error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_trans, 2, 
+                                   NULL, transWorkerSize, transGroupSize,
+                                   0, NULL, NULL);
+
+    oclError("oclDaisy","clEnqueueNDRangeKernel (10)",error);
+
+    clFinish(daisyCl->queue);
+
+
+
+#ifdef DEBUG_ALL
+
+    error = clEnqueueReadBuffer(daisyCl->queue, pyramidBuffer, CL_TRUE,
+                                srcOffset * sizeof(float), 
+                                layerWidth * layerHeight * daisy->gradientsNo * sizeof(float), inputArray,
+                                0, NULL, NULL);
+
+    error = clEnqueueReadBuffer(daisyCl->queue, transBuffer, CL_TRUE,
+                                dstOffset * sizeof(float), 
+                                layerWidth * layerHeight * daisy->gradientsNo * sizeof(float), testArray,
+                                0, NULL, NULL);
+
+    clFinish(daisyCl->queue);
+  
+    long int issues = verifyTransposeGradientsPartialNorm(inputArray, testArray, layerWidth, layerHeight, daisy->gradientsNo);
+
+    if(issues > 0) printf("%ld issues with transposeGradients in layer %d\n",issues,layer);
+
+#endif
+
+  }
+
+  clReleaseMemObject(pyramidBuffer);
+
+  gettimeofday(&times->endTransGrad,NULL);
   gettimeofday(&times->endConvGrad,NULL);
 
   times->startt = times->startConvGrad.tv_sec+(times->startConvGrad.tv_usec/1000000.0);
@@ -612,61 +670,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   printf("\nconvds: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight*8*3) / (1000000.0f*times->difft));
 
   return 0;
-
-  // A) transpose SxGxHxW to SxHxWxG first
-
-  gettimeofday(&times->startTransGrad,NULL);
-
-  long int memorySize = daisy->gradientsNo * daisy->smoothingsNo * 
-                        paddedWidth * paddedHeight * sizeof(cl_float);
-
-  cl_mem transBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
-                                      memorySize, (void*)NULL, &error);
-
-  oclError("oclDaisy","clCreateBuffer (3)",error);
-
-  //printf("\ntransBuffer size = %ld (%ldMB)\n",memorySize,memorySize/(1024*1024));
-
-  
-  size_t transWorkerSize[2] = {daisy->paddedWidth,daisy->paddedHeight * daisy->smoothingsNo * daisy->gradientsNo};
-  size_t transGroupSize[2] = {32,8};
-
-  clSetKernelArg(daisy->oclPrograms.kernel_trans, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_trans, 1, sizeof(transBuffer), (void*)&transBuffer);
-  clSetKernelArg(daisy->oclPrograms.kernel_trans, 2, sizeof(int), (void*)&(daisy->paddedWidth));
-  clSetKernelArg(daisy->oclPrograms.kernel_trans, 3, sizeof(int), (void*)&(daisy->paddedHeight));
-
-  error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_trans, 2, 
-                                 NULL, transWorkerSize, transGroupSize,
-                                 0, NULL, NULL);
-
-  oclError("oclDaisy","clEnqueueNDRangeKernel (10)",error);
-
-  clFinish(daisyCl->queue);
-
-  clReleaseMemObject(pyramidBuffer);
-
-  gettimeofday(&times->endTransGrad,NULL);
-  //short int DEBUG_ALL;
-  if(DEBUG_ALL){
-    // Verify transposition A)
-    error = clEnqueueReadBuffer(daisyCl->queue, transBuffer, CL_TRUE,
-                                paddedWidth * paddedHeight * 8 * 1 * sizeof(float), 
-                                paddedWidth * paddedHeight * 8 * sizeof(float), testArray,
-                                0, NULL, NULL);
-
-    clFinish(daisyCl->queue);
-
-    int dstWidth = daisy->paddedWidth * daisy->gradientsNo;
-    printf("\nTranspose:\n");
-    int r;
-    for(r = 0; r < 2; r++){
-      printf("Row %d: %f",r,testArray[r * dstWidth]);
-      for(k = 1; k < 25; k++)
-        printf(", %f", testArray[r * dstWidth + k]);
-      printf("\n\n");
-    }
-  }
 
   // B) final transposition
 
@@ -935,7 +938,9 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   free(inputArray);
 
-  if(DEBUG_ALL) free(testArray);
+#ifdef DEBUG_ALL
+  free(testArray);
+#endif
 
   free(memoryEvents);
   free(kernelEvents);
@@ -1203,3 +1208,37 @@ long int verifyConvolutionY(float * inputData, float * outputData, int height, i
 
 }
 
+long int verifyTransposeGradientsPartialNorm(float * inputData, float * outputData, int width, int height, int gradientsNo){
+
+  long int issues = 0;
+  int limit = 40;
+
+  for(int g = 0; g < gradientsNo; g++){
+
+    for(int y = 0; y < height; y++){
+
+      for(int x = 0; x < width; x++){
+
+        float inputValue = .0f;
+        for(int i = 0; i < gradientsNo; i++){
+          const float in = inputData[i * width * height + y * width + x];;
+          inputValue += in*in;
+        }
+        float val = inputData[g * width * height + y * width + x];
+        inputValue = (inputValue == 0.0 ? val : val / sqrt(inputValue));
+
+//        inputValue = inputData[g * width * height + y * width + x];
+        float outputValue = outputData[y * width * gradientsNo + x * gradientsNo + g];
+
+        issues += fabs(inputValue - outputValue) > 0.0001f;
+        if(issues > 0 && issues++ < limit)
+          printf("Issue at y,x %d,%d; found %f should be %f\n",y,x,outputValue,inputValue);
+
+      }
+
+    }
+
+  }
+
+  return issues;
+}

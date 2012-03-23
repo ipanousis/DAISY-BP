@@ -10,7 +10,7 @@
 #define max(a,b) (a > b ? a : b)
 
 // downsample for each sigma of PHI_SIGMA_DOWNSAMPLE
-#define PHI_SIGMA_DOWNSAMPLE 1
+#define PHI_SIGMA_DOWNSAMPLE 1.25f
 #define DOWNSAMPLE_RATE 4
 
 #define DAISY_PROFILING
@@ -49,7 +49,7 @@ typedef struct ocl_daisy_programs_tag{
 #ifndef PYRAMID_LAYER_SET
 #define PYRAMID_LAYER_SET
 typedef struct pyramid_layer_set_tag{
-  int phi;
+  float phi;
   float sigma; // sigma to get from previous layer
   int downsample; // downsample due to smoothing on previous layer
   float t_sigma; // total sigma

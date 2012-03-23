@@ -217,6 +217,47 @@ __kernel void convolveDs_y(__global   float * pyramidArray,
 __kernel void transposeGradients(__global float * srcArray,
                                  __global float * dstArray,
                                  const    int     srcWidth,
+                                 const    int     srcHeight,
+                                 const    int     srcOffset,
+                                 const    int     dstOffset)
+{
+
+    const int groupRow = get_global_id(1) / GRADIENT_NUM;
+    const int groupRowGradientSection = get_local_id(1);
+
+    const int srcIndex = srcOffset + (groupRowGradientSection * srcHeight + groupRow) * srcWidth + get_global_id(0);
+
+    __local float lclArray[(TRANS_GROUP_SIZE_X+2) * TRANS_GROUP_SIZE_Y];
+
+    lclArray[get_local_id(1) * (TRANS_GROUP_SIZE_X+2) + get_local_id(0)] = srcArray[srcIndex];
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    const int localY = get_local_id(0) % TRANS_GROUP_SIZE_Y;
+    const int localX = get_local_id(0) / TRANS_GROUP_SIZE_Y + get_local_id(1) * (TRANS_GROUP_SIZE_X / TRANS_GROUP_SIZE_Y);
+
+    //
+    // Normalisation piggy-backing along with the transposition
+    //
+    float l2normSum = .0f;
+    for(int i = 0; i < GRADIENT_NUM; i++){
+      const float g = lclArray[((localY+i) % GRADIENT_NUM) * (TRANS_GROUP_SIZE_X+2) + localX];
+      l2normSum += g*g;
+    }
+    l2normSum = (l2normSum == 0.0 ? 1 : 1 / sqrt(l2normSum));
+    //
+    //
+    //
+
+    const int dstRow = groupRow;
+    const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
+
+    dstArray[dstOffset + dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX] * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
+}
+
+/*__kernel void transposeGradients(__global float * srcArray,
+                                 __global float * dstArray,
+                                 const    int     srcWidth,
                                  const    int     srcHeight)
 {
 
@@ -254,7 +295,7 @@ __kernel void transposeGradients(__global float * srcArray,
     const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
 
     dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX] * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
-}
+}*/
 
 #define TRANSD_DATA_WIDTH 16
 #define TRANSD_PAIRS_OFFSET_WIDTH 1000
