@@ -16,14 +16,14 @@ int * generateTranspositionOffsets(int, int, float*, int, int*, int*);
 //
 // maximum width that this TR_BLOCK_SIZE is effective on (assuming at least 
 // TR_DATA_WIDTH rows should be allocated per block) is currently 16384
-#define ARRAY_PADDING 64
+#define ARRAY_PADDING 128
 #define TR_BLOCK_SIZE 512*512
 #define TR_DATA_WIDTH 16
 #define TR_PAIRS_SINGLE_ONLY -999
 #define TR_PAIRS_OFFSET_WIDTH 1000
 
 // Verify all intermediate outputs
-//#define DEBUG_ALL
+#define DEBUG_ALL
 
 pyramid_layer_set * newPyramidLayerSetting(float sigma, float newTotalSigma, int prevTotalDownsample){
 
@@ -664,13 +664,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   gettimeofday(&times->endTransGrad,NULL);
   gettimeofday(&times->endConvGrad,NULL);
 
-  times->startt = times->startConvGrad.tv_sec+(times->startConvGrad.tv_usec/1000000.0);
-  times->endt = times->endConvGrad.tv_sec+(times->endConvGrad.tv_usec/1000000.0);
-  times->difft = times->endt-times->startt;
-  printf("\nconvds: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight*8*3) / (1000000.0f*times->difft));
-
-  return 0;
-
   // B) final transposition
 
   gettimeofday(&times->startTransDaisy,NULL);
@@ -731,11 +724,19 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
     for(int smoothingNo = 0; smoothingNo < daisy->smoothingsNo; smoothingNo++){
 
+      
+
       int pairOffsetsLength = allPairOffsetsLengths[smoothingNo];
 
       //printf("Running daisy section (%d,%d) out of %d - smoothing %d\n",sectionY,sectionX,totalSections,smoothingNo);
 
-      int srcGlobalOffset = daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo * smoothingNo;
+      pyramid_layer_set * layerSettings = daisy->pyramidLayerSettings[smoothingNo];
+
+      //int srcGlobalOffset = daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo * smoothingNo;
+      int srcGlobalOffset = daisy->pyramidLayerOffsets[smoothingNo];
+      int filterDownsample = layerSettings->t_downsample;
+
+      int petalStart = smoothingNo * 8 + (smoothingNo > 0);
 
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 0, sizeof(transBuffer), (void*)&transBuffer);
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 1, sizeof(daisyBuffer), (void*)&daisyBuffer);
@@ -745,7 +746,9 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 5, sizeof(int), (void*)&(daisy->paddedHeight));
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 6, sizeof(int), (void*)&(srcGlobalOffset));
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 7, sizeof(int), (void*)&(pairOffsetsLength));
-      clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&(lclArrayPaddings[smoothingNo]));
+      //clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&(lclArrayPaddings[smoothingNo]));
+      clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&filterDownsample);
+      clSetKernelArg(daisy->oclPrograms.kernel_transd, 9, sizeof(int), (void*)&petalStart);
 
       error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_transd, 2,
                                      daisyWorkerOffsets, daisyWorkerSize, daisyGroupSize,
@@ -815,6 +818,11 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   times->endt = times->endFull.tv_sec+(times->endFull.tv_usec/1000000.0);
   times->difft = times->endt-times->startt;
   printf("\nDaisyFull: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*times->difft));
+
+  //times->startt = times->startConvGrad.tv_sec+(times->startConvGrad.tv_usec/1000000.0);
+  //times->endt = times->endConvGrad.tv_sec+(times->endConvGrad.tv_usec/1000000.0);
+  //times->difft = times->endt-times->startt;
+  //printf("\nconvds: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight*8*3) / (1000000.0f*times->difft));
 
   //
   // VERIFICATION CODE
@@ -922,7 +930,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   //free(daisyDescriptorsSection);
   //}
 
-  clReleaseMemObject(hostPinnedDaisyDescriptors);
+  //clReleaseMemObject(hostPinnedDaisyDescriptors);
 
 #endif
 
