@@ -23,7 +23,7 @@ int * generateTranspositionOffsets(int, int, float*, int, int*, int*);
 #define TR_PAIRS_OFFSET_WIDTH 1000
 
 // Verify all intermediate outputs
-#define DEBUG_ALL
+//#define DEBUG_ALL
 
 pyramid_layer_set * newPyramidLayerSetting(float sigma, float newTotalSigma, int prevTotalDownsample){
 
@@ -606,7 +606,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   for(int layer = 0; layer < daisy->smoothingsNo; layer++){
     
-    int totalDownsample = pow(DOWNSAMPLE_RATE / 2, daisy->pyramidLayerSettings[layer]->t_downsample);
+    int totalDownsample = pow(sqrt(DOWNSAMPLE_RATE), daisy->pyramidLayerSettings[layer]->t_downsample);
     int layerWidth = daisy->paddedWidth / totalDownsample;
     int layerHeight = daisy->paddedHeight / totalDownsample;
 
@@ -734,20 +734,20 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
       //int srcGlobalOffset = daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo * smoothingNo;
       int srcGlobalOffset = daisy->pyramidLayerOffsets[smoothingNo];
-      int filterDownsample = layerSettings->t_downsample;
+      int totalDownsample = pow(sqrt(DOWNSAMPLE_RATE), layerSettings->t_downsample);
 
       int petalStart = smoothingNo * 8 + (smoothingNo > 0);
 
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 0, sizeof(transBuffer), (void*)&transBuffer);
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 1, sizeof(daisyBuffer), (void*)&daisyBuffer);
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 2, sizeof(allPairOffsetBuffers[smoothingNo]), (void*)&allPairOffsetBuffers[smoothingNo]);
-      clSetKernelArg(daisy->oclPrograms.kernel_transd, 3, sizeof(float) * (windowHeight * (windowWidth * daisy->gradientsNo + lclArrayPaddings[smoothingNo])), 0);
+      clSetKernelArg(daisy->oclPrograms.kernel_transd, 3, sizeof(float) * (windowHeight * (windowWidth * daisy->gradientsNo)), 0);
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 4, sizeof(int), (void*)&(daisy->paddedWidth));
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 5, sizeof(int), (void*)&(daisy->paddedHeight));
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 6, sizeof(int), (void*)&(srcGlobalOffset));
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 7, sizeof(int), (void*)&(pairOffsetsLength));
       //clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&(lclArrayPaddings[smoothingNo]));
-      clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&filterDownsample);
+      clSetKernelArg(daisy->oclPrograms.kernel_transd, 8, sizeof(int), (void*)&totalDownsample);
       clSetKernelArg(daisy->oclPrograms.kernel_transd, 9, sizeof(int), (void*)&petalStart);
 
       error = clEnqueueNDRangeKernel(daisyCl->queue, daisy->oclPrograms.kernel_transd, 2,

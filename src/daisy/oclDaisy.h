@@ -10,7 +10,7 @@
 #define max(a,b) (a > b ? a : b)
 
 // downsample for each sigma of PHI_SIGMA_DOWNSAMPLE
-#define PHI_SIGMA_DOWNSAMPLE 1.25f
+#define PHI_SIGMA_DOWNSAMPLE 2
 #define DOWNSAMPLE_RATE 4
 
 #define DAISY_PROFILING
