@@ -40,3 +40,17 @@ Progress:
            for the CPU version to have a robust comparison. The speedup however
            has proven pretty good already and the functionality has also been
            largely verified.
+28/03/12 - Functionality is verified. Speed has been benchmarked against
+           the CPU version and dense SIFT as well. It is much faster than both.
+           The downsampling idea, which is to build Gaussian pyramid of the smoothed
+           layers, is being looked at now. It has been implemented so that dense
+           descriptors can be output originating from a Gaussian pyramid, but the
+           final operation on the GPU has not been optimised for this. For post-DAISY
+           computation processing on the GPU an application would not want to do
+           the final transposition as the redundancy of the data volume would make it too
+           inefficient. So while the pre-final transpose operations are much faster
+           still, the quality of the output itself is being examined. The downsampling
+           does show less accuracy but how much is still to be determined. Any application
+           however that continues processing on GPU with the pre-DAISY data will be offered
+           huge remaining time per second even with a resolution of 1024x768 ~100(!) frames/second
+           can be achieved to get pre-DAISY data (SxHxWxG).
