@@ -40,16 +40,20 @@ int main( int argc, char **argv  )
 
     initOcl(daisyPrograms,daisyCl);
 
-    daisy->oclPrograms = *daisyPrograms;
+    daisy->oclPrograms = daisyPrograms;
 
     oclDaisy(daisy, daisyCl, &times);
 
     //printf("Paired Offsets: %d\n",pairedOffsetsLength);
     //printf("Actual Pairs: %d\n",actualPairs);
 
+    //int oclDaisySearch(ocl_constructs * ocl, daisy_params * daisyRef, daisy_params * daisyTar)
+
+    oclDaisySearch(daisyCl, daisy, daisy);
+
     string binaryfile = filename;
     binaryfile += ".bdaisy";
-    kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+//    kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
 
     gettimeofday(&endTime,NULL);
 
@@ -132,7 +136,7 @@ int main( int argc, char **argv  )
       times.measureDeviceHostTransfers = 1;
 
       daisy = newDaisyParams(array, height, width, 8, 8, 3, NULL);
-      daisy->oclPrograms = *daisyPrograms;
+      daisy->oclPrograms = daisyPrograms;
 
       for(int i = 0; i < iterations; i++){
       

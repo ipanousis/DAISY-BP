@@ -363,3 +363,111 @@ __kernel void transposeDaisy(__global   float * srcArray,
   }
 }
 
+__kernel void searchDaisy(__global    float * refArray,
+                          __global    float * tarArray,
+                          __global    float * dspArray,
+                          __local     float * lclRefArray,
+                          __local     float * lclTarArray,
+                          __constant  int   * buildArray,
+                          const       int     pyramidOffset,
+                          const       int     buildHalo){
+
+  const int radius = get_local_size(0);
+  const int blockWidth = radius+2*buildHalo;
+
+  //pyrArrayOffset = pyramidOffset * GRADIENT_NUM
+  //dspArrayOffset = pyramidOffset * size(SEARCH_RANGE) // SEARCH_RANGE = (1+2*radius)*(1+2*radius)
+  
+  //width = get_global_size(0)
+  //height = get_global_size(1)
+
+  const int width = get_global_size(0);
+  const int gy = get_global_id(1);
+  const int gx = get_global_id(0);
+
+  // no matches for border pixels
+  if(gx < radius || gx >= width-radius || gy < radius || gy >= get_global_size(1)-radius) return;
+
+  const int lx = get_local_id(0);
+  const int ly = get_local_id(1);
+  // import reference block of size (radius+2*buildHalo)*(radius+2*buildHalo)
+  if(1){
+    const int importSteps = (blockWidth-1) / radius + 1;
+    for(int i = 0; i < importSteps; i++){
+      if(i < importSteps-1 || ly < blockWidth%radius){
+
+        for(int j = 0; j < blockWidth / (radius / GRADIENT_NUM); j++){
+
+          lclRefArray[(i * radius + ly) * blockWidth * GRADIENT_NUM +     // local Y
+                                            j * 2 * GRADIENT_NUM + lx] =  // local X
+
+            refArray[pyramidOffset * GRADIENT_NUM + (get_group_id(1) * radius - buildHalo + i * radius + ly) * width * GRADIENT_NUM + // global Y
+                                           (get_group_id(0) * radius + j * 2) * GRADIENT_NUM + lx]; // global X
+
+        }
+      }
+    }
+  }
+
+  for(int by = -1; by < 1; by++){
+
+    for(int bx = -1; bx < 1; bx++){
+
+      // import target block of size 'same'
+      if(1){
+        const int importSteps = (blockWidth-1) / radius + 1;
+        for(int i = 0; i < importSteps; i++){
+          if(i < importSteps-1 || ly < blockWidth%radius){
+
+            for(int j = 0; j < blockWidth / (radius / GRADIENT_NUM); j++){
+
+                lclTarArray[(i * radius + ly) * blockWidth * GRADIENT_NUM +     // local Y
+                                                  j * 2 * GRADIENT_NUM + lx] =  // local X
+
+                  tarArray[pyramidOffset * GRADIENT_NUM + (get_group_id(1) * radius - buildHalo + i * radius + ly) * width * GRADIENT_NUM + // global Y
+                                                 (get_group_id(0) * radius + j * 2) * GRADIENT_NUM + lx]; // global X
+
+            }
+          }
+        }
+      }
+
+      // per ref point
+        // per tar point
+          // store diff
+      for(int tary = max(ly,(by+1)*radius); tary < min(ly+2*radius,(by+2)*radius); tary++){
+        for(int tarx = max(lx,(bx+1)*radius); tarx < min(lx+2*radius,(bx+2)*radius); tarx++){
+
+  
+          float sum = .0f;
+          for(int r = 0; r < REGION_PETALS_NO; r++){
+            const int offsetY = buildHalo + buildArray[r * 2]; // if 0 is row
+            const int offsetX = buildHalo + buildArray[r * 2 + 1]; // if 1 is column
+
+            // 8 times (gradients no)
+            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM]
+                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM]);
+            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+1]
+                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+1]);
+            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+2]
+                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+2]);
+            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+3]
+                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+3]);
+            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+4]
+                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+4]);
+            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+5]
+                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+5]);
+            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+6]
+                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+6]);
+            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+7]
+                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+7]);
+          }
+          dspArray[(gy * width + gx) * (radius*2+1) * (radius*2+1) + (tary-ly-radius) * (radius*2+1) + (tarx-lx-radius)] = sum;
+        }
+      }
+
+    }
+
+  }
+}
+

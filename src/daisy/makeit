@@ -10,4 +10,4 @@ g++ -I$PROJ/include -I/usr/local/cuda/include \
     src/kutility/image_io_png.cpp src/kutility/image_io_pnm.cpp \
     src/kutility/image_io_jpeg.cpp src/kutility/image_manipulation.cpp \
     src/kutility/interaction.cpp src/kutility/general.cpp src/ocl/cachedConstructs.c \
-    src/ocl/cachedProgram.c src/daisy/oclDaisy.cpp -o src/daisy/gdaisy
+    src/ocl/cachedProgram.c src/daisy/oclDaisy.cpp src/daisy/oclDaisySearch.cpp src/daisy/general.cpp -o src/daisy/gdaisy

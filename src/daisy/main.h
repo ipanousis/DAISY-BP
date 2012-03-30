@@ -1,6 +1,8 @@
 #include <stdlib.h>
 
+#include "general.h"
 #include "oclDaisy.h"
+#include "oclDaisySearch.h"
 
 #include "kutility/general.h"
 #include "kutility/math.h"
