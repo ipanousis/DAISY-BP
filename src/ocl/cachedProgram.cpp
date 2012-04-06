@@ -127,7 +127,7 @@ cl_program CreateProgramFromBinary(cl_context context, cl_device_id device,
   return program;
 }
 
-cl_int SaveProgramBinary(cl_program program, cl_device_id device, char * binaryName){
+cl_int SaveProgramBinary(cl_program program, cl_device_id device, const char * binaryName){
 
   cl_int error = 0;
 

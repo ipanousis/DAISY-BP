@@ -51,7 +51,7 @@ int initOcl(ocl_daisy_programs * daisy, ocl_constructs * daisyCl){
   const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math";
 
   // Build denoising filter
-  error = buildCachedProgram(daisyCl, "daisyKernels.cl", options);
+  error = buildCachedProgram(daisyCl, "src/daisy/daisyKernels.cl", options);
   
   if(daisyCl->program == NULL){
     fprintf(stderr, "oclDaisy.cpp::oclDaisy buildCachedProgram returned NULL, cannot continue\n");

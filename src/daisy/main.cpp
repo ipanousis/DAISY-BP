@@ -60,7 +60,7 @@ int main( int argc, char **argv  )
     diff = end-start;
     printf("\nMain: %.3fs\n",diff);
   }
-  else{
+  else if(0){
     
     // do the profiling across a range of inputs from 128x128 to 1536x1536
 
@@ -168,6 +168,10 @@ int main( int argc, char **argv  )
     printf("Speed test results written to %s.\n", csvOutName);
     free(daisy->descriptors);
     free(array);
+  }
+  else{
+    fprintf(stderr,"Pass image filename with argument -i <file>\n");
+    return 1;
   }
 
   return 0;
