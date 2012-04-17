@@ -491,9 +491,10 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
       else if(g == daisy->gradientsNo-1) printf("convolveDs_y in smoothing %d is ok!\n",layer);
     }
 
+    printf("End of SMOOTH+DS %d, HxW = %dx%d --> %dx%d\n",layer,layerHeight*filterDownsample,layerWidth*filterDownsample,layerHeight,layerWidth);
+
 #endif
 
-    printf("End of SMOOTH+DS %d, HxW = %dx%d --> %dx%d\n",layer,layerHeight*filterDownsample,layerWidth*filterDownsample,layerHeight,layerWidth);
 
   }
 
@@ -571,6 +572,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
 
   gettimeofday(&times->endTransGrad,NULL);
   gettimeofday(&times->endConvGrad,NULL);
+
+#ifndef DAISY_NO_DESCRIPTORS
 
   // B) final transposition
 
@@ -718,20 +721,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
   error = clFinish(ocl->queue);
   oclError("oclDaisy","clFinish (daisy)",error);
 
-  gettimeofday(&times->endTransDaisy,NULL);
-
-  gettimeofday(&times->endFull,NULL);
-
-  times->startt = times->startFull.tv_sec+(times->startFull.tv_usec/1000000.0);
-  times->endt = times->endFull.tv_sec+(times->endFull.tv_usec/1000000.0);
-  times->difft = times->endt-times->startt;
-  printf("\nDaisyFull: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*times->difft));
-
-  times->startt = times->startConvGrad.tv_sec+(times->startConvGrad.tv_usec/1000000.0);
-  times->endt = times->endConvGrad.tv_sec+(times->endConvGrad.tv_usec/1000000.0);
-  times->difft = times->endt-times->startt;
-  printf("\nconvds: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight*8*3) / (1000000.0f*times->difft));
-
   //
   // VERIFICATION CODE
   //
@@ -849,14 +838,33 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
     free(allPairOffsets[s]);
   }
 
+  clReleaseMemObject(daisyBufferA);
+  if(totalSections > 1) clReleaseMemObject(daisyBufferB);
+
+  free(memoryEvents);
+  free(kernelEvents);
+
+#endif
+
+  gettimeofday(&times->endTransDaisy,NULL);
+
+  gettimeofday(&times->endFull,NULL);
+
+  times->startt = times->startFull.tv_sec+(times->startFull.tv_usec/1000000.0);
+  times->endt = times->endFull.tv_sec+(times->endFull.tv_usec/1000000.0);
+  times->difft = times->endt-times->startt;
+  printf("\nDaisyFull: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*times->difft));
+
+  times->startt = times->startConvGrad.tv_sec+(times->startConvGrad.tv_usec/1000000.0);
+  times->endt = times->endConvGrad.tv_sec+(times->endConvGrad.tv_usec/1000000.0);
+  times->difft = times->endt-times->startt;
+  printf("\nconvds: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight*8*3) / (1000000.0f*times->difft));
+
   free(inputArray);
 
 #ifdef DEBUG_ALL
   free(testArray);
 #endif
-
-  free(memoryEvents);
-  free(kernelEvents);
 
 #ifndef DAISY_SEARCH
   clReleaseMemObject(transBuffer);
@@ -864,10 +872,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
   daisy->oclBuffers->transBuffer = transBuffer;
 #endif
 
-  clReleaseMemObject(daisyBufferA);
-  if(totalSections > 1) clReleaseMemObject(daisyBufferB);
-
-  return error | issues;
+  return error;
 }
 
 // Generates pairs of neighbouring destination petal points given;

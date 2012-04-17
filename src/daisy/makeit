@@ -1,4 +1,5 @@
 #!/bin/sh
+rm daisyKernels.cl.bin
 cd $PROJ
 export OMP_NUM_THREADS=8
 g++ -I$PROJ/include -I/usr/local/cuda/include \

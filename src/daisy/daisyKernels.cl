@@ -363,110 +363,116 @@ __kernel void transposeDaisy(__global   float * srcArray,
   }
 }
 
+#define LCL_PADDING 1
+#define MAX_BLOCK_WIDTH 8
+
 __kernel void searchDaisy(__global    float * refArray,
                           __global    float * tarArray,
                           __global    float * dspArray,
-                          __local     float * lclRefArray,
-                          __local     float * lclTarArray,
-                          __constant  int   * buildArray,
+                          __constant  float * buildArray,
                           const       int     pyramidOffset,
+                                      int     offsetG,
                           const       int     buildHalo){
 
   const int radius = get_local_size(0);
-  const int blockWidth = radius+2*buildHalo;
-
-  //pyrArrayOffset = pyramidOffset * GRADIENT_NUM
-  //dspArrayOffset = pyramidOffset * size(SEARCH_RANGE) // SEARCH_RANGE = (1+2*radius)*(1+2*radius)
-  
-  //width = get_global_size(0)
-  //height = get_global_size(1)
-
+  const int blockWidth = radius + 2 * buildHalo;
   const int width = get_global_size(0);
-  const int gy = get_global_id(1);
-  const int gx = get_global_id(0);
 
   // no matches for border pixels
-  if(gx < radius || gx >= width-radius || gy < radius || gy >= get_global_size(1)-radius) return;
+  if(get_global_id(0) < radius*2 || get_global_id(0) >= width-radius*2 || get_global_id(1) < radius*2 || get_global_id(1) >= get_global_size(1)-radius*2) return;
 
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
+
+  const int constantDspOffset = offsetG + (get_global_id(1) * width + get_global_id(0)) * (radius*2+1)*(radius*2+1);
+
+  offsetG = pyramidOffset + (get_group_id(1) * radius - buildHalo + ly) * width * GRADIENT_NUM + // global Y
+                            (get_group_id(0) * radius - buildHalo) * GRADIENT_NUM;               // global X
+
+  
+  __local float lclRefArray[MAX_BLOCK_WIDTH * MAX_BLOCK_WIDTH * (GRADIENT_NUM + LCL_PADDING)];
+
   // import reference block of size (radius+2*buildHalo)*(radius+2*buildHalo)
-  if(1){
-    const int importSteps = (blockWidth-1) / radius + 1;
-    for(int i = 0; i < importSteps; i++){
-      if(i < importSteps-1 || ly < blockWidth%radius){
+  for(int i = ly; i < ly + blockWidth; i+=radius){
 
-        for(int j = 0; j < blockWidth / (radius / GRADIENT_NUM); j++){
+    for(int j = lx; j < lx + blockWidth * GRADIENT_NUM; j+=radius){
 
-          lclRefArray[(i * radius + ly) * blockWidth * GRADIENT_NUM +     // local Y
-                                            j * 2 * GRADIENT_NUM + lx] =  // local X
-
-            refArray[pyramidOffset * GRADIENT_NUM + (get_group_id(1) * radius - buildHalo + i * radius + ly) * width * GRADIENT_NUM + // global Y
-                                           (get_group_id(0) * radius + j * 2) * GRADIENT_NUM + lx]; // global X
-
-        }
-      }
+      lclRefArray[i * blockWidth * (GRADIENT_NUM+LCL_PADDING) +  // local Y
+                              j + (j / GRADIENT_NUM) * LCL_PADDING] =  // local X with padding per set of gradients
+                                           
+        refArray[offsetG + j]; // global X
     }
+
+    offsetG += radius * width * GRADIENT_NUM;
   }
 
-  for(int by = -1; by < 1; by++){
+  __local float buildArrayL[REGION_PETALS_NO * 2];
+  offsetG = (REGION_PETALS_NO*2-1) / (radius*radius) + 1;
+  for(int i = 0; i < offsetG; i++){
 
-    for(int bx = -1; bx < 1; bx++){
+    if(i == offsetG-1 && (ly*radius+lx) >= (REGION_PETALS_NO*2) % (radius*radius) && (REGION_PETALS_NO*2) % (radius*radius) > 0) break;
+    buildArrayL[i * radius * radius + (ly*radius+lx)] = buildArray[i * radius * radius + (ly*radius+lx)];
+
+  }
+
+  __local float lclTarArray[MAX_BLOCK_WIDTH * MAX_BLOCK_WIDTH * (GRADIENT_NUM + LCL_PADDING)];
+
+  for(int bn = 0; bn < 9; bn++){
 
       // import target block of size 'same'
-      if(1){
-        const int importSteps = (blockWidth-1) / radius + 1;
-        for(int i = 0; i < importSteps; i++){
-          if(i < importSteps-1 || ly < blockWidth%radius){
+      offsetG = pyramidOffset + ((get_group_id(1) + (bn/3)-1) * radius - buildHalo + ly) * width * GRADIENT_NUM + // global Y
+                               ((get_group_id(0) + (bn%3)-1) * radius - buildHalo) * GRADIENT_NUM;               // global X
 
-            for(int j = 0; j < blockWidth / (radius / GRADIENT_NUM); j++){
+      for(int i = ly; i < ly + blockWidth; i+=radius){
 
-                lclTarArray[(i * radius + ly) * blockWidth * GRADIENT_NUM +     // local Y
-                                                  j * 2 * GRADIENT_NUM + lx] =  // local X
+        for(int j = lx; j < lx + blockWidth * GRADIENT_NUM; j+=radius){
 
-                  tarArray[pyramidOffset * GRADIENT_NUM + (get_group_id(1) * radius - buildHalo + i * radius + ly) * width * GRADIENT_NUM + // global Y
-                                                 (get_group_id(0) * radius + j * 2) * GRADIENT_NUM + lx]; // global X
-
-            }
-          }
+          lclTarArray[i * blockWidth * (GRADIENT_NUM+LCL_PADDING) +  // local Y
+                                  j + (j / GRADIENT_NUM) * LCL_PADDING] =  // local X with padding per set of gradients
+                                               
+            tarArray[offsetG + j]; // global X
         }
+
+        offsetG += radius * width * GRADIENT_NUM;
       }
+  
+      barrier(CLK_LOCAL_MEM_FENCE);
 
       // per ref point
         // per tar point
           // store diff
-      for(int tary = max(ly,(by+1)*radius); tary < min(ly+2*radius,(by+2)*radius); tary++){
-        for(int tarx = max(lx,(bx+1)*radius); tarx < min(lx+2*radius,(bx+2)*radius); tarx++){
+      const int offsetR = (ly * blockWidth + lx) * (GRADIENT_NUM+LCL_PADDING);
+      for(int tary = max(ly,(bn/3)*radius); tary < min(ly+2*radius,(bn/3+1)*radius) + 1; tary++){
+        for(int tarx = max(lx,(bn%3)*radius); tarx < min(lx+2*radius,(bn%3+1)*radius) + 1; tarx++){
+          const int offsetT = ((tary%radius) * blockWidth + (tarx%radius)) * (GRADIENT_NUM+LCL_PADDING);
 
-  
           float sum = .0f;
           for(int r = 0; r < REGION_PETALS_NO; r++){
-            const int offsetY = buildHalo + buildArray[r * 2]; // if 0 is row
-            const int offsetX = buildHalo + buildArray[r * 2 + 1]; // if 1 is column
+            const int offset = ((buildHalo + buildArrayL[r * 2]) * blockWidth + buildHalo + buildArrayL[r * 2 + 1]) * (GRADIENT_NUM+LCL_PADDING);
 
             // 8 times (gradients no)
-            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM]
-                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM]);
-            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+1]
-                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+1]);
-            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+2]
-                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+2]);
-            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+3]
-                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+3]);
-            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+4]
-                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+4]);
-            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+5]
-                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+5]);
-            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+6]
-                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+6]);
-            sum += fabs( lclRefArray[(offsetY+ly) * blockWidth * GRADIENT_NUM + (offsetX+lx) * GRADIENT_NUM+7]
-                       -lclTarArray[(offsetY+tary%radius) * blockWidth * GRADIENT_NUM + (offsetX+tarx%radius) * GRADIENT_NUM+7]);
+            sum += fabs( lclRefArray[offsetR+offset]
+                       -lclTarArray[offsetT+offset]);
+            sum += fabs( lclRefArray[offsetR+offset+1]
+                       -lclTarArray[offsetT+offset+1]);
+            sum += fabs( lclRefArray[offsetR+offset+2]
+                       -lclTarArray[offsetT+offset+2]);
+            sum += fabs( lclRefArray[offsetR+offset+3]
+                       -lclTarArray[offsetT+offset+3]);
+            sum += fabs( lclRefArray[offsetR+offset+4]
+                       -lclTarArray[offsetT+offset+4]);
+            sum += fabs( lclRefArray[offsetR+offset+5]
+                       -lclTarArray[offsetT+offset+5]);
+            sum += fabs( lclRefArray[offsetR+offset+6]
+                       -lclTarArray[offsetT+offset+6]);
+            sum += fabs( lclRefArray[offsetR+offset+7]
+                       -lclTarArray[offsetT+offset+7]);
           }
-          dspArray[(gy * width + gx) * (radius*2+1) * (radius*2+1) + (tary-ly-radius) * (radius*2+1) + (tarx-lx-radius)] = sum;
+
+          dspArray[constantDspOffset + (tary-ly) * (radius*2+1) + (tarx-lx)] = sum;
+
         }
       }
-
-    }
 
   }
 }
