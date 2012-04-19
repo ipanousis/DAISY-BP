@@ -91,7 +91,7 @@ int initOcl(ocl_daisy_programs * daisy, ocl_constructs * ocl){
   const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math";
 
   // Build program
-  error = buildCachedProgram(ocl, "daisyKernels.cl", options);
+  error = buildCachedProgram(ocl, "src/daisy/daisyKernels.cl", options);
   oclError("initOcl", "buildCachedProgram", error);
 
   // Prepare kernels
