@@ -1,3 +1,12 @@
+/*
+
+  Project  : DAISY in OpenCL
+  Author   : Ioannis Panousis - ip223@bath.ac.uk
+  Creation : December/2011
+
+  File: cachedProgram.cpp
+
+*/
 #include "ocl/cachedProgram.h"
 #include <stdio.h>
 

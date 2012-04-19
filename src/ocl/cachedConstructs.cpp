@@ -1,3 +1,12 @@
+/*
+
+  Project  : DAISY in OpenCL
+  Author   : Ioannis Panousis - ip223@bath.ac.uk
+  Creation : December/2011
+
+  File: cachedConstructs.cpp
+
+*/
 #include "ocl/cachedConstructs.h"
 
 ocl_constructs * newOclConstructs(cl_uint workerSize, cl_uint groupSize, cl_bool clGlSharing){
