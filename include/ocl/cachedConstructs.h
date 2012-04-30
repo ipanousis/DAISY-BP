@@ -1,9 +1,9 @@
 #include <CL/cl.h>
-#include <CL/cl_gl.h>
-#include <GL/glx.h>
+//#include <CL/cl_gl.h>
+//#include <GL/glx.h>
 
-#ifndef OCL_CONSTRUCTS
-#define OCL_CONSTRUCTS
+#ifndef OPENCL_CACHED_CONSTRUCTS
+#define OPENCL_CACHED_CONSTRUCTS
 typedef struct ocl_constructs_tag{
   cl_platform_id platformId;
   cl_device_id deviceId;

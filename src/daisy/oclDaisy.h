@@ -7,11 +7,6 @@
 #include "ocl/cachedProgram.h"
 #include "ocl/cachedConstructs.h"
 
-#include "kutility/math.h"
-
-#define min(a,b) (a > b ? b : a)
-#define max(a,b) (a > b ? a : b)
-
 #define DAISY_PROFILING
 //#define DAISY_HOST_TRANSFER
 #define DAISY_NO_DESCRIPTORS

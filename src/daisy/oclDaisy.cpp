@@ -1,5 +1,9 @@
 #include "oclDaisy.h"
+#include "kutility/math.h"
 #include <sys/time.h>
+
+#define min(a,b) (a > b ? b : a)
+#define max(a,b) (a > b ? a : b)
 
 long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
 long int verifyConvolutionX(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
@@ -69,6 +73,10 @@ int initOcl(ocl_daisy_programs * daisy, ocl_constructs * ocl){
   // Search
   daisy->kernel_search = clCreateKernel(ocl->program, "searchDaisy", &error);
   oclError("initOcl", "clCreateKernel (search)", error);
+
+  // Match
+  daisy->kernel_match = clCreateKernel(ocl->program, "matchDaisy", &error);
+  oclError("initOcl", "clCreateKernel (match)", error);
 
   return error;
 }
@@ -194,9 +202,9 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
 
   oclError("oclDaisy","clCreateBuffer (1)",error);
 
-  printf("pyramidBuffer size = %ld (%ldMB)\n", pyramidBufferSize, pyramidBufferSize / (1024 * 1024));
-  printf("tempPyramid size = %ld (%ldMB)\n", tempPyramidSize, tempPyramidSize / (1024 * 1024));
-  printf("paddedWidth = %d, paddedHeight = %d\n", paddedWidth, paddedHeight);
+  //printf("pyramidBuffer size = %ld (%ldMB)\n", pyramidBufferSize, pyramidBufferSize / (1024 * 1024));
+  //printf("tempPyramid size = %ld (%ldMB)\n", tempPyramidSize, tempPyramidSize / (1024 * 1024));
+  //printf("paddedWidth = %d, paddedHeight = %d\n", paddedWidth, paddedHeight);
 
   cl_mem * filterBuffers = (cl_mem*) malloc(sizeof(cl_mem) * (daisy->smoothingsNo + 1));
 
@@ -505,12 +513,17 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
   long int memorySize = (daisy->pyramidLayerOffsets[daisy->smoothingsNo-1] + 
                          daisy->pyramidLayerSizes[daisy->smoothingsNo-1]) * sizeof(float);
 
-  cl_mem transBuffer = clCreateBuffer(ocl->context, CL_MEM_READ_WRITE,
-                                      memorySize, (void*)NULL, &error);
+  cl_mem transBuffer;
+
+  if(daisy->oclBuffers->transBuffer == NULL){
+    transBuffer = clCreateBuffer(ocl->context, CL_MEM_READ_WRITE,
+                                 memorySize, (void*)NULL, &error);
+  }
+  else transBuffer = daisy->oclBuffers->transBuffer;
 
   oclError("oclDaisy","clCreateBuffer (3)",error);
 
-  printf("\ntransBuffer size = %ld (%ldMB)\n",memorySize,memorySize/(1024*1024));
+  //printf("\ntransBuffer size = %ld (%ldMB)\n",memorySize,memorySize/(1024*1024));
 
 
   for(int layer = 0; layer < daisy->smoothingsNo; layer++){
@@ -527,7 +540,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
     int srcOffset = tempPyramidSize + pyramidLayerOffset;
     int dstOffset = pyramidLayerOffset;
 
-    printf("Layer Size HxW = %dx%d\n",layerHeight,layerWidth);
+    //printf("Layer Size HxW = %dx%d\n",layerHeight,layerWidth);
 
     clSetKernelArg(daisy->oclPrograms->kernel_trans, 0, sizeof(pyramidBuffer), (void*)&pyramidBuffer);
     clSetKernelArg(daisy->oclPrograms->kernel_trans, 1, sizeof(transBuffer), (void*)&transBuffer);
@@ -657,7 +670,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
       clSetKernelArg(daisy->oclPrograms->kernel_transd, 5, sizeof(int), (void*)&(daisy->paddedHeight));
       clSetKernelArg(daisy->oclPrograms->kernel_transd, 6, sizeof(int), (void*)&(srcGlobalOffset));
       clSetKernelArg(daisy->oclPrograms->kernel_transd, 7, sizeof(int), (void*)&(pairOffsetsLength));
-      //clSetKernelArg(daisy->oclPrograms->kernel_transd, 8, sizeof(int), (void*)&(lclArrayPaddings[smoothingNo]));
       clSetKernelArg(daisy->oclPrograms->kernel_transd, 8, sizeof(int), (void*)&totalDownsample);
       clSetKernelArg(daisy->oclPrograms->kernel_transd, 9, sizeof(int), (void*)&petalStart);
 
@@ -849,7 +861,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
   gettimeofday(&times->endTransDaisy,NULL);
 
   gettimeofday(&times->endFull,NULL);
-
+/*
   times->startt = times->startFull.tv_sec+(times->startFull.tv_usec/1000000.0);
   times->endt = times->endFull.tv_sec+(times->endFull.tv_usec/1000000.0);
   times->difft = times->endt-times->startt;
@@ -859,7 +871,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
   times->endt = times->endConvGrad.tv_sec+(times->endConvGrad.tv_usec/1000000.0);
   times->difft = times->endt-times->startt;
   printf("\nconvds: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight*8*3) / (1000000.0f*times->difft));
-
+*/
   free(inputArray);
 
 #ifdef DEBUG_ALL

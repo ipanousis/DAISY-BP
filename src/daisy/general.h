@@ -12,7 +12,7 @@
 #define PHI_SIGMA_DOWNSAMPLE 1.0f
 #define DOWNSAMPLE_RATE 4
 
-#define ARRAY_PADDING 128
+#define ARRAY_PADDING 256
 
 #define DAISY_SEARCH
 
@@ -44,6 +44,7 @@ typedef struct ocl_daisy_programs_tag{
   cl_kernel kernel_trans;
   cl_kernel kernel_transd;
   cl_kernel kernel_search;
+  cl_kernel kernel_match;
 } ocl_daisy_programs;
 #endif
 

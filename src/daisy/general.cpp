@@ -31,6 +31,7 @@ daisy_params * newDaisyParams(unsigned char* array, int height, int width,
   params->paddedHeight = params->height + (ARRAY_PADDING - params->height % ARRAY_PADDING) % ARRAY_PADDING;
 
   params->oclBuffers = (ocl_daisy_buffers*)malloc(sizeof(ocl_daisy_buffers));
+  params->oclBuffers->transBuffer = NULL;
 
   generatePyramidSettings(params);
 

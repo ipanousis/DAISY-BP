@@ -407,7 +407,7 @@ __kernel void searchDaisy(__global    float * refArray,
   }
 
   __local float buildArrayL[REGION_PETALS_NO * 2];
-  offsetG = (REGION_PETALS_NO*2-1) / (radius*radius) + 1;
+  offsetG = ((REGION_PETALS_NO)*2-1) / (radius*radius) + 1;
   for(int i = 0; i < offsetG; i++){
 
     if(i == offsetG-1 && (ly*radius+lx) >= (REGION_PETALS_NO*2) % (radius*radius) && (REGION_PETALS_NO*2) % (radius*radius) > 0) break;
@@ -475,5 +475,101 @@ __kernel void searchDaisy(__global    float * refArray,
       }
 
   }
+}
+
+#define WORKGROUP_SIZE 16
+
+__kernel void matchDaisy(__global    float * dspArray,
+                         __constant  int   * dspWidths,
+                         __global    float * flowArray){
+
+  // each workitem needs the 9*9 floats of layer 0, 5*5 of layer 1 and 5*5 of layer 2
+  // in total -> 81 + 50 = 131 floats = 524 bytes
+  // with a workgroup of 16 for coalescence -> 16 * 524 = 8384 bytes
+
+  // BUT the local memory need only occupy the dimensions of the largest layer;
+  // 9 * 9
+  // so that the other layers' values are added onto the first as delivered
+
+  __local float lclDspArray[16 * (9 * 9)];
+
+  const int lx = get_local_id(0);
+
+  int globalOffset = (get_global_id(1) * get_global_size(0) + get_group_id(0) * WORKGROUP_SIZE) * (dspWidths[0]) * (dspWidths[0]) + lx;
+
+  // for layer 0
+  //read 9 * 9 * 16 floats
+
+  for(int i = 0; i < (dspWidths[0]*dspWidths[0]); i++){
+
+    lclDspArray[lx + i * WORKGROUP_SIZE] = dspArray[globalOffset + i * WORKGROUP_SIZE];
+
+  }
+
+  globalOffset = (get_global_size(0) * get_global_size(1)) * (dspWidths[0] * dspWidths[0]) + 
+                 ((get_global_id(1) / 2) * (get_global_size(0) / 2) + get_global_id(0) / 2) * (dspWidths[1] * dspWidths[1]) + lx;
+
+  // for layer 1
+  //read 5 * 5 * 16 floats and add them on the layer 0
+
+  for(int i = 0; i < dspWidths[1]*dspWidths[1]; i++){
+
+    if(i * WORKGROUP_SIZE + lx >= 200) break;
+
+    const float d = dspArray[globalOffset + i * WORKGROUP_SIZE];
+
+    const int y = (i * WORKGROUP_SIZE + lx) / 5;
+    const int x = (i * WORKGROUP_SIZE + lx) % 5;
+
+    lclDspArray[(y * 2 - y / 5) * 9 + x * 2] += d;
+    if(x < 4) lclDspArray[(y * 2 - y / 5) * 9 + x * 2 + 1] += d;
+    if(y % 5 < 4) lclDspArray[(y * 2 - y / 5 + 1) * 9 + x * 2] += d;
+    if(x < 4 && y % 5 < 4) lclDspArray[(y * 2 - y / 5 + 1) * 9 + x * 2 + 1] += d;
+
+  }
+
+  globalOffset = (get_global_size(0) * get_global_size(1)) * (dspWidths[0]) * (dspWidths[0]) + 
+                 ((get_global_size(0) / 2) * (get_global_size(1) / 2)) * (dspWidths[1]) * (dspWidths[1]) + 
+                 ((get_global_id(1) / 2) * (get_global_size(0) / 2) + get_global_id(0) / 2) * (dspWidths[2]) * (dspWidths[2]) + lx;
+
+  // for layer 2
+  //read 5 * 5 * 16 floats and add them on the layers 0,1
+
+  for(int i = 0; i < (dspWidths[2])*(dspWidths[2]); i++){
+
+    if(i * WORKGROUP_SIZE + lx >= 200) break; 
+
+    const float d = dspArray[globalOffset + i * WORKGROUP_SIZE];
+
+    const int y = (i * WORKGROUP_SIZE + lx) / 5;
+    const int x = (i * WORKGROUP_SIZE + lx) % 5;
+
+    lclDspArray[(y * 2 - y / 5) * 9 + x * 2] += d;
+    if(x < 4) lclDspArray[(y * 2 - y / 5) * 9 + x * 2 + 1] += d;
+    if(y % 5 < 4) lclDspArray[(y * 2 - y / 5 + 1) * 9 + x * 2] += d;
+    if(x < 4 && y % 5 < 4) lclDspArray[(y * 2 - y / 5 + 1) * 9 + x * 2 + 1] += d;
+
+  }
+
+  // iterate over the 9 * 9 numbers
+  //find minimum of those
+  float minD = 9999;
+  int minV = 0;
+
+  for(int i = 0; i < (dspWidths[0]) * (dspWidths[0]); i++){
+    const float d = lclDspArray[lx * (dspWidths[0]) * (dspWidths[0]) + i];
+    if(d < minD){
+      minD = d;
+      minV = i;
+    }
+  }
+
+  //write 16 floats to flowArray
+
+  globalOffset = get_global_id(1) * get_global_size(0) + get_global_id(0);  
+
+  flowArray[globalOffset] = minV / (dspWidths[0]) - dspWidths[0] / 2; // write flow in Y
+  flowArray[get_global_size(0) * get_global_size(1) + globalOffset] = minV % (dspWidths[0]) - dspWidths[0] / 2; // write flow in X
+
 }
 
