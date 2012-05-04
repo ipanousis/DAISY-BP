@@ -67,11 +67,22 @@ typedef struct time_params_tag{
 
   struct timeval startFull, endFull; // whole daisy computation - conv,grad,transA(,transB(,transfers))
 
+  struct timeval startConv, endConv; // measure the Gaussian convolutions on the gradients
+
+  struct timeval startConvX, endConvX; // measure the middle convolution in X (for different steps)
+
+  struct timeval startGrad, endGrad; // measure gradients
+
   struct timeval startConvGrad, endConvGrad; // measure all convolutions and gradient
 
   struct timeval startTransGrad, endTransGrad; // measure transposition of gradients
 
   struct timeval startTransDaisy, endTransDaisy; // measure transposition to daisy descriptors, with or without transfers
+
+  struct timeval startTransPinned, endTransPinned; // time to compute a block + transfer it to pinned memory
+  struct timeval startTransRam, endTransRam; // time to transfer a block from pinned memory to ram
+
+  double transPinned, transRam;
 
   double startt, endt, difft;
 

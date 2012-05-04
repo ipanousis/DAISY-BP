@@ -2,7 +2,7 @@
 #define CONVX_GROUP_SIZE_Y 8
 #define CONVX_WORKER_STEPS 4
 
-__kernel void convolve_x7(__global   float * massArray,
+__kernel void convolve_Denx(__global   float * massArray,
                           __constant float  * fltArray,
                           const      int     pddWidth,
                           const      int     pddHeight)
@@ -39,7 +39,7 @@ __kernel void convolve_x7(__global   float * massArray,
 #define CONVY_GROUP_SIZE_Y 8
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_y7(__global   float * massArray,
+__kernel void convolve_Deny(__global   float * massArray,
                           __constant float * fltArray,
                           const      int     pddWidth,
                           const      int     pddHeight)
@@ -71,7 +71,7 @@ __kernel void convolve_y7(__global   float * massArray,
   }
 }
 
-__kernel void gradient_8all(__global float * massArray,
+__kernel void gradients_all(__global float * massArray,
                             const    int     pddWidth,
                             const    int     pddHeight)
 {
@@ -126,7 +126,7 @@ __kernel void gradient_8all(__global float * massArray,
 #define CONVX_GROUP_SIZE_Y 4
 #define CONVX_WORKER_STEPS 4
 
-__kernel void convolve_x11(__global   float * massArray,
+__kernel void convolve_G0x(__global   float * massArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -164,7 +164,7 @@ __kernel void convolve_x11(__global   float * massArray,
 #define CONVY_GROUP_SIZE_Y 8
 #define CONVY_WORKER_STEPS 8
 
-__kernel void convolve_y11(__global   float * massArray,
+__kernel void convolve_G0y(__global   float * massArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -199,9 +199,10 @@ __kernel void convolve_y11(__global   float * massArray,
   }
 }
 
-//#define CONVX_WORKER_STEPS 8
+#define CONVX_GROUP_SIZE_X 16
+#define CONVX_WORKER_STEPS 4
 
-__kernel void convolve_x23(__global   float * massArray,
+__kernel void convolve_G1x(__global   float * massArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -239,7 +240,7 @@ __kernel void convolve_x23(__global   float * massArray,
 #define CONVY_GROUP_SIZE_Y 16
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_y23(__global   float * massArray,
+__kernel void convolve_G1y(__global   float * massArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -276,7 +277,7 @@ __kernel void convolve_y23(__global   float * massArray,
 
 //#define CONVX_WORKER_STEPS 8
 
-__kernel void convolve_x29(__global   float * massArray,
+__kernel void convolve_G2x(__global   float * massArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -313,7 +314,7 @@ __kernel void convolve_x29(__global   float * massArray,
 
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_y29(__global   float * massArray,
+__kernel void convolve_G2y(__global   float * massArray,
                            __constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
@@ -381,19 +382,19 @@ __kernel void transposeGradients(__global float * srcArray,
     //
     // Normalisation piggy-backing along with the transposition
     //
-    float l2normSum = .0f;
+    /*float l2normSum = .0f;
     for(int i = 0; i < GRADIENT_NUM; i++){
       const float g = lclArray[((localY+i) % GRADIENT_NUM) * (TRANS_GROUP_SIZE_X+2) + localX];
       l2normSum += g*g;
     }
-    l2normSum = (l2normSum == 0.0 ? 1 : 1 / sqrt(l2normSum));
+    l2normSum = (l2normSum == 0.0 ? 1 : 1 / sqrt(l2normSum));*/
     //
     //
 
     const int dstRow = smoothSection * srcHeight + groupRow;
     const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
 
-    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX] * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
+    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX];// * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
 }
 
 //#define TRANSD_BLOCK_WIDTH 512
