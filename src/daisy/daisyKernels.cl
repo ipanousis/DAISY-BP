@@ -85,7 +85,7 @@ __kernel void gradient_all(__global float * massArray,
                             const    int     pddWidth,
                             const    int     pddHeight)
 {
-
+  
   const int r = get_global_id(0) / pddWidth;
   const int c = get_global_id(0) % pddWidth;
   const int srcOffset = pddWidth * pddHeight * 8 + r * pddWidth + c;
