@@ -46,29 +46,32 @@ Progress:
               This is done by
               1) more fine-grain worker/workload granularity and
                  little local memory usage
-              2) vitally, decomposing the DAISY transposition pair-wise around each
-                 of the DAISY petal regions, these can be read in (but only partial so far)
-                 coalescence and also written in full coalescence
+              2) vitally, decomposing the DAISY transposition pair-wise around 
+                 each of the DAISY petal regions, these can be read in (but 
+                 only partial so far) coalescence and also written in full 
+                 coalescence
               
               This last part, fully coalesced writes, comes at a small sacrifice
               though. The structure of each output DAISY descriptor will consist of
               1 extra petal in order to form an even number of them, from 25 to 26.
               This ensures much faster speeds and is not considered a great problem.
               
-              It will be made possible however to easily change this by program arguments.
-              This will essentially harm performance.
+              It will be made possible however to easily change this by program 
+              arguments. This will essentially harm performance.
               
-              This commit only submits the kernel and C code that runs it in order to keep
-              record of it, but this is not yet a working whole. Next commit the whole
-              program will be organised for practical use and made to have all the flexibilities
-              necessary.
+              This commit only submits the kernel and C code that runs it in order 
+              to keep record of it, but this is not yet a working whole. Next 
+              commit the whole program will be organised for practical use and made 
+              to have all the flexibilities necessary.
               
-              ... PS. There is more speed-up to be gained by fully coalescing the reads. The
-              kernel reportedly takes 30% of its time for those, so factor that into the full
-              time of the algorithm it should give an approximate speedup of x1.2.
+              ... PS. There is more speed-up to be gained by fully coalescing the 
+              reads. The kernel reportedly takes 30% of its time for those, so factor 
+              that into the full time of the algorithm it should give an approximate 
+              speedup of x1.2.
               
-              ... PS2. The fully coalesced writes is a speedup that can come without the
-              sacrifice of output format, but this is a little complex in its implementation
-              and so will be considered only if the format change is found to be a problem.
+              ... PS2. The fully coalesced writes is a speedup that can come without 
+              the sacrifice of output format, but this is a little complex in its 
+              implementation and so will be considered only if the format change is 
+              found to be a problem.
               
               ... PS3. There are always more speed-ups :)
