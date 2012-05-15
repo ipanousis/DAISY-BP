@@ -64,6 +64,7 @@ int main( int argc, char **argv  )
     oclDaisy(daisy, daisyCl, &times);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     //printf("Paired Offsets: %d\n",pairedOffsetsLength);
     //printf("Actual Pairs: %d\n",actualPairs);
 
@@ -74,11 +75,17 @@ int main( int argc, char **argv  )
 //    kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
 =======
     string binaryfile = filename;
+=======
+    string binaryfile = filename;
+>>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
     binaryfile += ".bgdaisy";
 
     printf("Saving binary as %s...\n",filename);
     unpadDescriptorArray(daisy);
     kutility::save_binary(binaryfile, daisy->descriptors, daisy->height * daisy->width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+<<<<<<< HEAD
+>>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
+=======
 >>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
 
     gettimeofday(&endTime,NULL);
@@ -149,7 +156,11 @@ int main( int argc, char **argv  )
       printf("%dx%d\n",height,width);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
       int iterations = 10;
+=======
+      int iterations = 15;
+>>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
 =======
       int iterations = 15;
 >>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97

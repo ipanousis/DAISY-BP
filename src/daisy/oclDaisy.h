@@ -1,5 +1,16 @@
+/*
+
+  Project  : DAISY in OpenCL
+  Author   : Ioannis Panousis - ip223@bath.ac.uk
+  Creation : February/2012
+
+  File: oclDaisy.h
+
+*/
+
 #include <stdio.h>
 #include <math.h>
+#include <CL/cl.h>
 
 #include "ocl/cachedProgram.h"
 #include "ocl/cachedConstructs.h"
@@ -11,6 +22,7 @@
 
 #define DAISY_PROFILING
 #define DAISY_HOST_TRANSFER
+//#define DEBUG_ALL
 
 #ifndef OCL_DAISY_PROGRAMS
 #define OCL_DAISY_PROGRAMS
@@ -43,6 +55,14 @@ typedef struct ocl_daisy_programs_tag{
 #endif
 
 #ifndef DAISY_PARAMS
+
+#define SMOOTHINGS_NO 3
+#define SIGMA_A 2.5f
+#define SIGMA_B 5.0f
+#define SIGMA_C 7.5f
+#define NO_GRADIENTS 8
+#define REGION_PETALS_NO 8
+
 #define DAISY_PARAMS
 typedef struct daisy_params_tag{
   unsigned char * array;
@@ -96,4 +116,6 @@ daisy_params * newDaisyParams(unsigned char*, int, int, int, int, int);
 int initOcl(ocl_daisy_programs*, ocl_constructs *);
 
 int oclDaisy(daisy_params *, ocl_constructs *, time_params *);
+
+void unpadDescriptorArray(daisy_params *);
 
