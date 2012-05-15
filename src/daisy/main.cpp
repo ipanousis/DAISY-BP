@@ -1,3 +1,13 @@
+/*
+
+  File: main.cpp
+
+  Project  : DAISY in OpenCL
+  Author   : Ioannis Panousis - ip223@bath.ac.uk
+  Creation : February/2012
+
+*/
+
 #include "main.h"
 #include <stdio.h>
 #include <sys/time.h>
@@ -11,28 +21,34 @@ void displayTimes(daisy_params * daisy,time_params * times);
 
 int main( int argc, char **argv  )
 {
-  int counter = 1;
   struct timeval startTime,endTime;
-  int width, height;
-  uchar* srcArray = NULL;
-
-  gettimeofday(&startTime,NULL);
 
   char* filename = NULL;
+  uchar* srcArray = NULL;
+  int width, height;
+
+  int counter = 1;
+
+  gettimeofday(&startTime,NULL);
 
   // Get command line options
   if(argc > counter+1 && (!strcmp("-i", argv[counter]) || !strcmp("--image", argv[counter]))){
 
     filename = argv[++counter];
     load_gray_image (filename, srcArray, height, width);
-    printf("HxW=%dx%d\n",height, width);
     counter++;
     
+    if(height * width > 2048 * 2048){
+      fprintf(stderr, "Apologies but this implementation is not yet ready to\
+                       accept larger image sizes than 2048*2048.\n\
+                       If you must process them, try to split your images in blocks or otherwise feel free to implement DAISY computation in parts :)");
+      return 1;
+    }
+
     ocl_constructs * daisyCl = newOclConstructs(0,0,0);
     ocl_daisy_programs * daisyPrograms = (ocl_daisy_programs*)malloc(sizeof(ocl_daisy_programs));
 
-    float sigmas[3] = {2.5,5,7.5};
-    daisy_params * daisy = newDaisyParams(srcArray, height, width, 8, 8, 3);//, sigmas);
+    daisy_params * daisy = newDaisyParams(srcArray, height, width, NO_GRADIENTS, REGION_PETALS_NO, SMOOTHINGS_NO);
 
     double start,end,diff;
 
@@ -47,6 +63,7 @@ int main( int argc, char **argv  )
 
     oclDaisy(daisy, daisyCl, &times);
 
+<<<<<<< HEAD
     //printf("Paired Offsets: %d\n",pairedOffsetsLength);
     //printf("Actual Pairs: %d\n",actualPairs);
 
@@ -55,17 +72,20 @@ int main( int argc, char **argv  )
     string binaryfile = filename;
     binaryfile += ".bdaisy";
 //    kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+=======
+    string binaryfile = filename;
+    binaryfile += ".bgdaisy";
+
+    printf("Saving binary as %s...\n",filename);
+    unpadDescriptorArray(daisy);
+    kutility::save_binary(binaryfile, daisy->descriptors, daisy->height * daisy->width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+>>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
 
     gettimeofday(&endTime,NULL);
 
     free(daisy->array);
-    printf("padded dimensions: %dx%d\n",daisy->paddedHeight,daisy->paddedWidth);
-    start = startTime.tv_sec+(startTime.tv_usec/1000000.0);
-    end = endTime.tv_sec+(endTime.tv_usec/1000000.0);
-    diff = end-start;
-    printf("\nMain: %.3fs\n",diff);
   }
-  else{
+  else if(argc > counter+1 && !strcmp("-profile", argv[counter])){
     
     // do the profiling across a range of inputs from 128x128 to 1536x1536
 
@@ -128,7 +148,11 @@ int main( int argc, char **argv  )
 
       printf("%dx%d\n",height,width);
 
+<<<<<<< HEAD
       int iterations = 10;
+=======
+      int iterations = 15;
+>>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
       int success = 0;
       double * wholeTimes = (double*)malloc(sizeof(double) * iterations);
 
@@ -147,7 +171,7 @@ int main( int argc, char **argv  )
 
       times.measureDeviceHostTransfers = 0;
 
-      daisy = newDaisyParams(array, height, width, 8, 8, 3);//, NULL);
+      daisy = newDaisyParams(array, height, width, NO_GRADIENTS, REGION_PETALS_NO, SMOOTHINGS_NO);
       daisy->oclPrograms = *daisyPrograms;
 
       for(int i = 0; i < iterations; i++){
@@ -199,6 +223,10 @@ int main( int argc, char **argv  )
     printf("Speed test results written to %s.\n", csvOutName);
 //    free(daisy->descriptors);
     free(array);
+  }
+  else{
+    fprintf(stderr,"Pass image filename with argument -i <file>, or profile with -profile\n");
+    return 1;
   }
 
   return 0;

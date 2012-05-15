@@ -1,3 +1,13 @@
+//
+//
+//  Project  : DAISY in OpenCL
+//  Author   : Ioannis Panousis - ip223@bath.ac.uk
+//  Creation : February/2012
+//
+//  File: daisyKernels.cl
+//
+//
+
 #define CONVX_GROUP_SIZE_X 16
 #define CONVX_GROUP_SIZE_Y 8
 #define CONVX_WORKER_STEPS 4
@@ -71,11 +81,15 @@ __kernel void convolve_Deny(__global   float * massArray,
   }
 }
 
+<<<<<<< HEAD
 __kernel void gradients_all(__global float * massArray,
+=======
+__kernel void gradient_all(__global float * massArray,
+>>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
                             const    int     pddWidth,
                             const    int     pddHeight)
 {
-
+  
   const int r = get_global_id(0) / pddWidth;
   const int c = get_global_id(0) % pddWidth;
   const int srcOffset = pddWidth * pddHeight * 8 + r * pddWidth + c;
