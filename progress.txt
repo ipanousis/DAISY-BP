@@ -36,7 +36,7 @@ Progress:
               It will be made possible however to easily change this by program 
               arguments. This will essentially harm performance.
               
-              This commit only submits the kernel and C code that runs it in order 
+              At this time the kernel and C code are submitted only in order 
               to keep record of it, but this is not yet a working whole. Next 
               commit the whole program will be organised for practical use and made 
               to have all the flexibilities necessary.
