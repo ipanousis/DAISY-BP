@@ -2,12 +2,19 @@ Third Year Project in Computer Science at Bath, UK. (2011-12)
 
 The project title is "Fast cross-device dense pixel correspondence using DAISY descriptors and OpenCL"
 
-It is aiming 
+Contents
+--------
+- Aim
+- Project Outcome
+- How to Compile/Run
+- Portability
+- Documentation
 
-1) to use OpenCL on graphics cards to implement the computation of the 
+Aim
+-------
+1) To use OpenCL on graphics cards to implement the computation of the 
 DAISY descriptor (cvlab.epfl.ch/alumni/tola/daisy.html) for an image in 
-a dense fashion, ie compute a descriptor for every pixel in the image, 
-or a large subset.
+a dense fashion, ie compute a descriptor for every pixel in the image.
 
 2) use Belief Propagation (on GPU again with OpenCL) to 
 (after DAISY descriptor images have been computed for two images) to 
@@ -15,63 +22,82 @@ search for the pixel correspondence between two images. This is also
 aimed to be done densely, ie for as many descriptors as are available 
 in the descriptor images
 
-The implementation of this application in OpenCL should broaden the 
-usability/applicability of such an algorithm to a range of different 
+The implementation of this algorithm in OpenCL should broaden the 
+usability/applicability of such an algorithm to a range of different
 hardware/software without specific system versions or requirements.
 This relies on the, currently strong, support of major OS/hardware 
 developers towards OpenCL.
 
-Progress:
-07/02/12 - Implemented DAISY up until all the smoothing/gradient kernels, 
-           the data on the GPU now needs to be transposed.... in a 4D type 
-           of transposition (AxBxCxD to CxDxAxB) ... fun! After this DAISY 
-           will be done and optimisations will need to be made, before 
-           proceeding to BP.
-03/03/12 - DAISY has been implemented in full and individual operations 
-           have been optimised (definitely the convolutions and first
-           transposition of gradients), the second transposition to desriptors
-           is complex but it has a structure to ensure coalesced reads/writes,
-           optimising it would be both time-consuming and also not very beneficial
-           given that the bottleneck of the whole computation is in the data
-           transfer back from the GPU. Whereas the descriptors cannot be kept
-           on GPU anyway because it's way too much data.
-           -->(idea to be explored next) downsampling to reduce the data
-           Speed measurements have been done, they will also be done properly
-           for the CPU version to have a robust comparison. The speedup however
-           has proven pretty good already and the functionality has also been
-           largely verified.
+Project Outcome
+----------------
+The project was successfully carried out and the first aim fulfilled. This is
+the dense extraction of DAISY features for a frame.
 
-15/05/12 - Gained a speed-up of x1.7 on the whole.
-              
-              This is done by
-              1) more fine-grain worker/workload granularity and
-                 little local memory usage
-              2) vitally, decomposing the DAISY transposition pair-wise around 
-                 each of the DAISY petal regions, these can be read in (but 
-                 only partial so far) coalescence and also written in full 
-                 coalescence
-              
-              This last part, fully coalesced writes, comes at a small sacrifice
-              though. The structure of each output DAISY descriptor will consist of
-              1 extra petal in order to form an even number of them, from 25 to 26.
-              This ensures much faster speeds and is not considered a great problem.
-              
-              It will be made possible however to easily change this by program 
-              arguments. This will essentially harm performance.
-              
-              This commit only submits the kernel and C code that runs it in order 
-              to keep record of it, but this is not yet a working whole. Next 
-              commit the whole program will be organised for practical use and made 
-              to have all the flexibilities necessary.
-              
-              ... PS. There is more speed-up to be gained by fully coalescing the 
-              reads. The kernel reportedly takes 30% of its time for those, so factor 
-              that into the full time of the algorithm it should give an approximate 
-              speedup of x1.2.
-              
-              ... PS2. The fully coalesced writes is a speedup that can come without 
-              the sacrifice of output format, but this is a little complex in its 
-              implementation and so will be considered only if the format change is 
-              found to be a problem.
-              
-              ... PS3. There are always more speed-ups :)
+The speed-up up until the end of the project was ~21x compared to C++ code
+on a GTS250 card, and ~10x when the data is transferred back to RAM.
+
+This is likely to improve in future so check the plots under doc/ for
+speed-up and real-time capability with respect to image size.
+
+The second aim of the project is left for future work as the project
+complexity did not allow it to be developed in the given timescale. The
+progression of the project currently is part of my master's project in 2012/13
+where dense object recognition with DAISY will be attempted.
+
+How to Compile/Run
+-------------------
+
+Pre-requisites:
+
+cmake
+g++
+
+Follow the installation instructions for OpenCL at;
+
+Nvidia - https://developer.nvidia.com/cuda-downloads
+ATI - http://developer.amd.com/tools/hc/AMDAPPSDK/downloads/Pages/default.aspx
+
+--------
+
+The code in this repository is ready to be compiled and run by;
+
+> ./autogen.sh
+> make
+
+> ./gdaisy -i <input image>
+
+to extract features for an image and store them in a binary file with the
+name <input image>.bdaisy
+
+or 
+
+> ./gdaisy -profile
+
+if you want to run a series of runs to measure the speed of DAISY extraction
+on your GPU. This may take upto a few minutes depending on your GPU.
+
+Portability
+------------
+
+Unfortunately there has not been time to do proper testing for portability
+regarding ATI cards, Windows and Mac. The code so far has proven to run on Linux
+and it does not show a problem with running on different Nvidia cards as is.
+
+Testing does need to be done for ATI, primarily, to make sure the OpenCL code
+is working correctly.
+
+Testing for Windows and Mac is less critical as the changes that may be needed
+will only be in the C/C++ code not OpenCL, which is much easier.
+
+Documentation
+---------------
+
+Some documents regarding performance and the poster presented at the university
+in 2011/12 are available under doc/.
+
+For an implementation progress log and an indication of future development
+see file progress.txt.
+
+If you wish to know the implementation in detail contact me to provide the
+final report for the project at ipanousis156@gmail.com
+

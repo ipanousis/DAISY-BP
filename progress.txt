@@ -1,0 +1,54 @@
+Progress:
+07/02/12 - Implemented DAISY up until all the smoothing/gradient kernels, 
+           the data on the GPU now needs to be transposed.... in a 4D type 
+           of transposition (AxBxCxD to CxDxAxB) ... fun! After this DAISY 
+           will be done and optimisations will need to be made, before 
+           proceeding to BP.
+03/03/12 - DAISY has been implemented in full and individual operations 
+           have been optimised (definitely the convolutions and first
+           transposition of gradients), the second transposition to desriptors
+           is complex but it has a structure to ensure coalesced reads/writes,
+           optimising it would be both time-consuming and also not very beneficial
+           given that the bottleneck of the whole computation is in the data
+           transfer back from the GPU. Whereas the descriptors cannot be kept
+           on GPU anyway because it's way too much data.
+           -->(idea to be explored next) downsampling to reduce the data
+           Speed measurements have been done, they will also be done properly
+           for the CPU version to have a robust comparison. The speedup however
+           has proven pretty good already and the functionality has also been
+           largely verified.
+
+15/05/12 - Gained a speed-up of x1.7 on the whole.
+              
+              This is done by
+              1) more fine-grain worker/workload granularity and
+                 little local memory usage
+              2) vitally, decomposing the DAISY transposition pair-wise around 
+                 each of the DAISY petal regions, these can be read in (but 
+                 only partial so far) coalescence and also written in full 
+                 coalescence
+              
+              This last part, fully coalesced writes, comes at a small sacrifice
+              though. The structure of each output DAISY descriptor will consist of
+              1 extra petal in order to form an even number of them, from 25 to 26.
+              This ensures much faster speeds and is not considered a great problem.
+              
+              It will be made possible however to easily change this by program 
+              arguments. This will essentially harm performance.
+              
+              This commit only submits the kernel and C code that runs it in order 
+              to keep record of it, but this is not yet a working whole. Next 
+              commit the whole program will be organised for practical use and made 
+              to have all the flexibilities necessary.
+              
+              ... PS. There is more speed-up to be gained by fully coalescing the 
+              reads. The kernel reportedly takes 30% of its time for those, so factor 
+              that into the full time of the algorithm it should give an approximate 
+              speedup of x1.2.
+              
+              ... PS2. The fully coalesced writes is a speedup that can come without 
+              the sacrifice of output format, but this is a little complex in its 
+              implementation and so will be considered only if the format change is 
+              found to be a problem.
+              
+              ... PS3. There are always more speed-ups :)
