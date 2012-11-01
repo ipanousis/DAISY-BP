@@ -63,8 +63,6 @@ int main( int argc, char **argv  )
 
     oclDaisy(daisy, daisyCl, &times);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     //printf("Paired Offsets: %d\n",pairedOffsetsLength);
     //printf("Actual Pairs: %d\n",actualPairs);
 
@@ -72,27 +70,17 @@ int main( int argc, char **argv  )
 
     string binaryfile = filename;
     binaryfile += ".bdaisy";
-//    kutility::save_binary(binaryfile, daisy->descriptors, daisy->paddedHeight * daisy->paddedWidth, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
-=======
-    string binaryfile = filename;
-=======
-    string binaryfile = filename;
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-    binaryfile += ".bgdaisy";
 
     printf("Saving binary as %s...\n",filename);
     unpadDescriptorArray(daisy);
+
     kutility::save_binary(binaryfile, daisy->descriptors, daisy->height * daisy->width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
-<<<<<<< HEAD
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
 
     gettimeofday(&endTime,NULL);
 
     free(daisy->array);
   }
-  else if(argc > counter+1 && !strcmp("-profile", argv[counter])){
+  else if(argc > counter && !strcmp("-profile", argv[counter])){
     
     // do the profiling across a range of inputs from 128x128 to 1536x1536
 
@@ -112,7 +100,7 @@ int main( int argc, char **argv  )
     sysTime = localtime(&timeVal);
 
     char * csvOutName = (char*)malloc(sizeof(char) * 500);
-    sprintf(csvOutName, "gdaisy-speed-tests-interop1-%02d%02d-%02d%02d.csv", sysTime->tm_mon+1, sysTime->tm_mday, sysTime->tm_hour, sysTime->tm_min);
+    sprintf(csvOutName, "gdaisy-speed-tests-%02d%02d-%02d%02d.csv", sysTime->tm_mon+1, sysTime->tm_mday, sysTime->tm_hour, sysTime->tm_min);
 
     FILE * csvOut = fopen(csvOutName,"w");
 
@@ -122,21 +110,20 @@ int main( int argc, char **argv  )
     //int total = 8;
 
     /* Without transfer ranges */
-    //int heights[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
-    //int widths[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
-    //int total = 12;
-//#define BLOCK_SIZE 128
-//    int heights[8] = {BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE};
-//    int widths[8] = {BLOCK_SIZE,BLOCK_SIZE*2,BLOCK_SIZE*3,BLOCK_SIZE*4,BLOCK_SIZE*5,BLOCK_SIZE*6,BLOCK_SIZE*7,BLOCK_SIZE*8};
-//    int total = 8;    
+    int heights[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
+    int widths[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
+    int total = 12;
+
+    //#define BLOCK_SIZE 128
+    //    int heights[8] = {BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE};
+    //    int widths[8] = {BLOCK_SIZE,BLOCK_SIZE*2,BLOCK_SIZE*3,BLOCK_SIZE*4,BLOCK_SIZE*5,BLOCK_SIZE*6,BLOCK_SIZE*7,BLOCK_SIZE*8};
+    //    int total = 8;    
 
     /* With transfer ranges */
-/*    int heights[4] = {1152,1280,1408,1536};//{128,256,384,512};//,,1152,1280,1408,1536};
+    /*int heights[4] = {1152,1280,1408,1536};//{128,256,384,512};//,,1152,1280,1408,1536};
     int widths[4] = {1152,1280,1408,1536};//,640,768,896,1024,1152,1280,1408,1536};
     int total = 4;//12;*/
-    int heights[1] = {1024};
-    int widths[1] = {1024};
-    int total = 1;
+
     // allocate the memory
     unsigned char * array = (unsigned char *)malloc(sizeof(unsigned char) * heights[total-1] * widths[total-1]);
 
@@ -155,15 +142,7 @@ int main( int argc, char **argv  )
 
       printf("%dx%d\n",height,width);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
       int iterations = 10;
-=======
-      int iterations = 15;
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
-      int iterations = 15;
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
       int success = 0;
       double * wholeTimes = (double*)malloc(sizeof(double) * iterations);
 

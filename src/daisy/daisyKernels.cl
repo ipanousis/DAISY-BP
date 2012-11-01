@@ -81,15 +81,7 @@ __kernel void convolve_Deny(__global   float * massArray,
   }
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-__kernel void gradients_all(__global float * massArray,
-=======
 __kernel void gradient_all(__global float * massArray,
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
-__kernel void gradient_all(__global float * massArray,
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
                             const    int     pddWidth,
                             const    int     pddHeight)
 {

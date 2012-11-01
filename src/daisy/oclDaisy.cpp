@@ -15,19 +15,13 @@
 float * generatePetalOffsets(float, int, short int);
 int * generateTranspositionOffsets(int, int, float*, int, int*, int*);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 double timeDiff2(struct timeval start, struct timeval end);
-=======
 long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
 long int verifyConvolutionX(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
 long int verifyTransposeGradientsPartialNorm(float * inputData, float * outputData, int width, int height, int gradientsNo);
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
 long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
 long int verifyConvolutionX(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
 long int verifyTransposeGradientsPartialNorm(float * inputData, float * outputData, int width, int height, int gradientsNo);
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
 
 // transposition offsets case where petal is left over and cannot be paired
 //
@@ -69,34 +63,6 @@ void unpadDescriptorArray(daisy_params * daisy){
     
     int rewind = row * paddingAdded * descriptorLength;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-  // Pass preprocessor build options
-  const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math -DFSC=14";
-=======
-    for(int i = row * daisy->paddedWidth * descriptorLength; i < (row+1) * daisy->paddedWidth * descriptorLength; i++){
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-
-      array[i - rewind] = array[i];
-
-<<<<<<< HEAD
-  // Prepare the kernel
-  daisy->kernel_f7x = clCreateKernel(daisyCl->program, "convolve_Denx", &error);
-  daisy->kernel_f7y = clCreateKernel(daisyCl->program, "convolve_Deny", &error);
-=======
-    }
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-
-  }
-
-<<<<<<< HEAD
-  // Build gradient kernel
-  
-  daisy->kernel_gAll = clCreateKernel(daisyCl->program, "gradients_all", &error);
-=======
-}
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
     for(int i = row * daisy->paddedWidth * descriptorLength; i < (row+1) * daisy->paddedWidth * descriptorLength; i++){
 
       array[i - rewind] = array[i];
@@ -106,114 +72,54 @@ void unpadDescriptorArray(daisy_params * daisy){
   }
 
 }
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
 
 int oclError(const char * function, const char * functionCall, int error){
+
   if(error){
     fprintf(stderr, "oclDaisy.cpp::%s %s failed: %d\n",function,functionCall,error);
     return error;
   }
-<<<<<<< HEAD
-<<<<<<< HEAD
   
+  return 0;
+}
+
+int initOcl(ocl_daisy_programs * daisy, ocl_constructs * ocl){
+
+  cl_int error;
+
+  // Prepare/Reuse platform, device, context, command queue
+  cl_bool recreateBuffers = 0;
+
+  error = buildCachedConstructs(ocl, &recreateBuffers);
+  oclError("initOcl", "buildCachedConstructs", error);
+
+  // Pass preprocessor build options
+  const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math";
+
+  // Build program
+  error = buildCachedProgram(ocl, "src/daisy/daisyKernels.cl", options);
+  oclError("initOcl", "buildCachedProgram", error);
+
+  // Prepare the kernel
+  daisy->kernel_f7x = clCreateKernel(daisyCl->program, "convolve_Denx", &error);
+  daisy->kernel_f7y = clCreateKernel(daisyCl->program, "convolve_Deny", &error);
+  oclError("initOcl", "clCreateKernel (Den)", error);
+
+  // Build gradient kernel
+  daisy->kernel_gAll = clCreateKernel(daisyCl->program, "gradients_all", &error);
+  oclError("initOcl", "clCreateKernel (gAll)", error);
+
   daisy->kernel_f11x = clCreateKernel(daisyCl->program, "convolve_G0x", &error);
   daisy->kernel_f11y = clCreateKernel(daisyCl->program, "convolve_G0y", &error);
-
-  if(error){
-    fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
-    return 1;
-  }
+  oclError("oclDaisy", "clCreateKernel (G0)", error);
   
   daisy->kernel_f23x = clCreateKernel(daisyCl->program, "convolve_G1x", &error);
   daisy->kernel_f23y = clCreateKernel(daisyCl->program, "convolve_G1y", &error);
-
-  if(error){
-    fprintf(stderr, "oclDaisy.cpp::oclDaisy clCreateKernel failed: %d\n",error);
-    return 1;
-  }
+  oclError("oclDaisy", "clCreateKernel (G1)", error);
   
   daisy->kernel_f29x = clCreateKernel(daisyCl->program, "convolve_G2x", &error);
   daisy->kernel_f29y = clCreateKernel(daisyCl->program, "convolve_G2y", &error);
-=======
-  return 0;
-}
-
-int initOcl(ocl_daisy_programs * daisy, ocl_constructs * ocl){
-
-  cl_int error;
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-
-  // Prepare/Reuse platform, device, context, command queue
-  cl_bool recreateBuffers = 0;
-
-  error = buildCachedConstructs(ocl, &recreateBuffers);
-  oclError("initOcl", "buildCachedConstructs", error);
-
-  // Pass preprocessor build options
-  const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math";
-
-  // Build program
-  error = buildCachedProgram(ocl, "src/daisy/daisyKernels.cl", options);
-  oclError("initOcl", "buildCachedProgram", error);
-
-  // Prepare kernels
-
-  // Denoising filter
-  daisy->kernel_f7x = clCreateKernel(ocl->program, "convolve_x7", &error);
-  daisy->kernel_f7y = clCreateKernel(ocl->program, "convolve_y7", &error);  
-  oclError("initOcl", "clCreateKernel (f7x)", error);
-
-  // Gradients
-  daisy->kernel_gAll = clCreateKernel(ocl->program, "gradient_all", &error);
-  oclError("initOcl", "clCreateKernel (gAll)", error);
-
-=======
-  return 0;
-}
-
-int initOcl(ocl_daisy_programs * daisy, ocl_constructs * ocl){
-
-  cl_int error;
-
-  // Prepare/Reuse platform, device, context, command queue
-  cl_bool recreateBuffers = 0;
-
-  error = buildCachedConstructs(ocl, &recreateBuffers);
-  oclError("initOcl", "buildCachedConstructs", error);
-
-  // Pass preprocessor build options
-  const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math";
-
-  // Build program
-  error = buildCachedProgram(ocl, "src/daisy/daisyKernels.cl", options);
-  oclError("initOcl", "buildCachedProgram", error);
-
-  // Prepare kernels
-
-  // Denoising filter
-  daisy->kernel_f7x = clCreateKernel(ocl->program, "convolve_x7", &error);
-  daisy->kernel_f7y = clCreateKernel(ocl->program, "convolve_y7", &error);  
-  oclError("initOcl", "clCreateKernel (f7x)", error);
-
-  // Gradients
-  daisy->kernel_gAll = clCreateKernel(ocl->program, "gradient_all", &error);
-  oclError("initOcl", "clCreateKernel (gAll)", error);
-
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-  // First smoothing filter
-  daisy->kernel_f7x = clCreateKernel(ocl->program, "convolve_x11", &error);
-  daisy->kernel_f7y = clCreateKernel(ocl->program, "convolve_y11", &error);  
-  oclError("initOcl", "clCreateKernel (f11x)", error);
-
-  // Second smoothing filter
-  daisy->kernel_f7x = clCreateKernel(ocl->program, "convolve_x23", &error);
-  daisy->kernel_f7y = clCreateKernel(ocl->program, "convolve_y23", &error);  
-  oclError("initOcl", "clCreateKernel (f23x)", error);
-
-  // Third smoothing filter
-  daisy->kernel_f7x = clCreateKernel(ocl->program, "convolve_x29", &error);
-  daisy->kernel_f7y = clCreateKernel(ocl->program, "convolve_y29", &error);  
-  oclError("initOcl", "clCreateKernel (f29x)", error);
+  oclError("oclDaisy", "clCreateKernel (G2)", error);
 
   // Convolve+Downsample
   //daisy->kernel_fxds = clCreateKernel(ocl->program, "convolveDs_x", &error);
@@ -504,30 +410,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   oclError("oclDaisy","clEnqueueNDRangeKernel (3)",error);
 
   clFinish(daisyCl->queue);
-<<<<<<< HEAD
-<<<<<<< HEAD
 
   gettimeofday(&times->endGrad,NULL);
-
-  if(DEBUG_ALL){
-
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
-                        paddedWidth * paddedHeight * sizeof(float), 
-                        paddedWidth * paddedHeight * sizeof(float), testArray,
-                        0, NULL, NULL);
-    clFinish(daisyCl->queue);
-    printf("\nBefore Gradient: %f",inputArray[512*paddedWidth+128]);
-    for(k = 1; k < 25; k++)
-      printf(", %f", inputArray[512*paddedWidth+128+k]);
-    printf("\nAfter Gradient (X,X+22.5,X+45,Y): %f",testArray[512*paddedWidth+128]);
-    for(k = 1; k < 25; k++)
-      printf(", %f", testArray[512*paddedWidth+128+k]);
-    printf("\n");
-  }
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
     
   // Smooth all to 2.5 - keep at massBuffer section A
   
@@ -588,36 +472,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   clFinish(daisyCl->queue);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-  gettimeofday(&times->endConvX,NULL);
-
-  if(DEBUG_ALL){
-
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
-                        paddedWidth * paddedHeight * (8 * 2 + 7) * sizeof(float), 
-                        paddedWidth * paddedHeight * sizeof(float), inputArray,
-                        0, NULL, NULL);
-    clFinish(daisyCl->queue);
-    printf("\nBefore Smooth (23x): %f",testArray[paddedWidth*daisy->height+50]);
-    for(k = 1; k < 25; k++){
-      int i = paddedWidth*daisy->height+50+k;
-      printf(", %f", testArray[i]);
-    }
-    printf("\n");
-    
-    printf("\nAfter Smooth (23x): %f",inputArray[paddedWidth*daisy->height+50]);
-    for(k = 1; k < 25; k++){
-      int i = paddedWidth*daisy->height+50+k;
-      printf(", %f", inputArray[i]);
-    }
-    printf("\n");
-  }
-
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
   // convolve Y - massBuffer sections: C to B
   size_t convWorkerSize23y[2] = {daisy->paddedWidth, (daisy->paddedHeight * daisy->gradientsNo) / 4};
   size_t convGroupSize23y[2]  = {16, 16};
@@ -673,37 +527,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   clFinish(daisyCl->queue);
 
   gettimeofday(&times->endConvGrad,NULL);
-
-<<<<<<< HEAD
-<<<<<<< HEAD
   gettimeofday(&times->endConv,NULL);
 
-  if(DEBUG_ALL){
-    error = clEnqueueReadBuffer(daisyCl->queue, massBuffer, CL_TRUE,
-                        paddedWidth * paddedHeight * (8 * 2 + 7) * sizeof(float), 
-                        paddedWidth * paddedHeight * sizeof(float), testArray,
-                        0, NULL, NULL);
-
-    if(error){
-      fprintf(stderr, "oclDaisy.cpp::oclDaisy clEnqueueReadBuffer (29y) failed: %d\n",error);
-      return 1;
-    }
-    clFinish(daisyCl->queue);
-
-    printf("\nBefore Smooth (29y): %f",inputArray[129+(paddedHeight-36)*paddedWidth]);
-    for(k = 1; k < 35; k++)
-      printf(", %f", inputArray[129+((paddedHeight-36)+k)*paddedWidth]);
-    printf("\n");
-    printf("\nAfter Smooth (29y): %f",testArray[129+(paddedHeight-36)*paddedWidth]);
-    for(k = 1; k < 35; k++)
-      printf(", %f", testArray[129+((paddedHeight-36)+k)*paddedWidth]);
-    printf("\n");
-  }
-
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
   // A) transpose SxGxHxW to SxHxWxG first
 
   gettimeofday(&times->startTransGrad,NULL);
@@ -890,18 +715,12 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   gettimeofday(&times->endFull,NULL);
 
-<<<<<<< HEAD
   times->difft = timeDiff2(times->startFull,times->endFull);
   printf("\nDaisyFull: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*times->difft));
-=======
   times->startt = times->startFull.tv_sec+(times->startFull.tv_usec/1000000.0);
   times->endt = times->endFull.tv_sec+(times->endFull.tv_usec/1000000.0);
   times->difft = times->endt-times->startt;
   printf("\nDaisy: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*times->difft));
-<<<<<<< HEAD
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
 
 #ifdef DEBUG_ALL
   //
@@ -911,17 +730,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   int issues = 0;
 
   // Verify transposition b)
-<<<<<<< HEAD
-<<<<<<< HEAD
   int TESTING_TRANSD = times->measureDeviceHostTransfers;
-  if(DEBUG_ALL && TESTING_TRANSD){
-=======
   if(times->measureDeviceHostTransfers){
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
-  if(times->measureDeviceHostTransfers){
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-
 
     for(int block = 0; block < totalSections; block++){
 
@@ -1000,7 +810,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   // END OF VERIFICATION CODE
   //
 #endif
-<<<<<<< HEAD
 
 /*  error = clFinish(daisyCl->queue);
     gettimeofday(&times->endConvGrad,NULL);
@@ -1009,29 +818,11 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   times->endt = times->endConvGrad.tv_sec+(times->endConvGrad.tv_usec/1000000.0);
   times->difft = times->endt-times->startt;
   printf("\nblock: %.4fs (%.4f MPixel/sec)\n",times->difft,(daisy->paddedWidth*daisy->paddedHeight) / (1000000.0f*times->difft));*/
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
 
   // Release and unmap buffers, free allocated space
 #ifdef DAISY_HOST_TRANSFER
 
   // don't unmap the pinned memory if there was only one block
-<<<<<<< HEAD
-<<<<<<< HEAD
-  //if(totalSections > 1){
-  printf("before\n");
-  // Uncomment when calling oclDaisy multiple times
-  error = clEnqueueUnmapMemObject(daisyCl->queue, hostPinnedDaisyDescriptors, daisyDescriptorsSection, 0, NULL, NULL);	
-
-    //oclError("oclDaisy","clEnqueueUnmapMemObject (hostPinnedSection)",error);
-  //}
-
-  // Uncomment when calling oclDaisy multiple times
-  clReleaseMemObject(hostPinnedDaisyDescriptors);
-
-  printf("after\n");
-  //free(daisyDescriptorsSection);
-=======
   if(totalSections > 1){
 
     error = clEnqueueUnmapMemObject(daisyCl->queue, hostPinnedDaisyDescriptors, daisyDescriptorsSection, 0, NULL, NULL);	
@@ -1040,20 +831,9 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
     free(daisyDescriptorsSection);
   }
 
-=======
-  if(totalSections > 1){
-
-    error = clEnqueueUnmapMemObject(daisyCl->queue, hostPinnedDaisyDescriptors, daisyDescriptorsSection, 0, NULL, NULL);	
-
-    oclError("oclDaisy","clEnqueueUnmapMemObject (hostPinnedSection)",error);
-    free(daisyDescriptorsSection);
-  }
-
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
   // Uncomment when calling oclDaisy multiple times for memory deallocation
   // Comment when looking to save transferred results of size 512*512 or less to binary
-  //clReleaseMemObject(hostPinnedDaisyDescriptors);
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
+  clReleaseMemObject(hostPinnedDaisyDescriptors);
 
 #endif
 
@@ -1284,15 +1064,12 @@ int* generateTranspositionOffsets(int windowHeight, int windowWidth,
   return pairedOffsets;
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 double timeDiff2(struct timeval start, struct timeval end){
 
   return (end.tv_sec+(end.tv_usec/1000000.0)) - (start.tv_sec+(start.tv_usec/1000000.0));
 
-=======
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
+}
+
 long int verifyConvolutionX(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample){
 
   long int issues = 0;
@@ -1308,7 +1085,58 @@ long int verifyConvolutionX(float * inputData, float * outputData, int height, i
         else if(x + f >= width) s += inputData[y * width + width-1] * filter[f + filterSize / 2];
         else s += inputData[y * width + x + f] * filter[f + filterSize / 2];
       }
-<<<<<<< HEAD
+
+      if(fabs(outputData[y * (width / downsample) + x / downsample] - s) > 0.0001f){
+        issues++;
+        if(issues < limit)
+          printf("Issue at y,x %d,%d\n",y,x);
+      }
+    }
+
+  }
+  
+  return issues;
+
+}
+
+long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample){
+
+  long int issues = 0;
+  int limit = 40;
+
+  for(int x = 0; x < width; x++){
+
+    for(int y = 0; y < height; y += downsample){
+
+      float s = .0f;
+      for(int f = -filterSize / 2; f < filterSize / 2 + 1; f++){
+        if(y + f < 0) s += inputData[x] * filter[f + filterSize / 2];
+        else if(y + f >= height) s += inputData[(height-1) * width + x] * filter[f + filterSize / 2];
+        else s += inputData[(y + f) * width + x] * filter[f + filterSize / 2];
+      }
+
+      if(fabs(outputData[(y / downsample) * width + x] - s) > 0.0001f){
+        issues++;
+        if(issues < limit)
+          printf("Issue at y,x %d,%d; found %f should be %f\n",y,x,outputData[(y / downsample) * width + x],s);
+      }
+    }
+  }
+
+  return issues;
+
+}
+
+long int verifyTransposeGradientsPartialNorm(float * inputData, float * outputData, int width, int height, int gradientsNo){
+
+  long int issues = 0;
+  int limit = 40;
+
+  for(int g = 0; g < gradientsNo; g++){
+
+    for(int y = 0; y < height; y++){
+
+      for(int x = 0; x < width; x++){
 
       if(fabs(outputData[y * (width / downsample) + x / downsample] - s) > 0.0001f){
         issues++;
@@ -1361,60 +1189,6 @@ long int verifyTransposeGradientsPartialNorm(float * inputData, float * outputDa
 
       for(int x = 0; x < width; x++){
 
-=======
-
-      if(fabs(outputData[y * (width / downsample) + x / downsample] - s) > 0.0001f){
-        issues++;
-        if(issues < limit)
-          printf("Issue at y,x %d,%d\n",y,x);
-      }
-    }
-
-  }
-  
-  return issues;
-
-}
-long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample){
-
-  long int issues = 0;
-  int limit = 40;
-
-  for(int x = 0; x < width; x++){
-
-    for(int y = 0; y < height; y += downsample){
-
-      float s = .0f;
-      for(int f = -filterSize / 2; f < filterSize / 2 + 1; f++){
-        if(y + f < 0) s += inputData[x] * filter[f + filterSize / 2];
-        else if(y + f >= height) s += inputData[(height-1) * width + x] * filter[f + filterSize / 2];
-        else s += inputData[(y + f) * width + x] * filter[f + filterSize / 2];
-      }
-
-      if(fabs(outputData[(y / downsample) * width + x] - s) > 0.0001f){
-        issues++;
-        if(issues < limit)
-          printf("Issue at y,x %d,%d; found %f should be %f\n",y,x,outputData[(y / downsample) * width + x],s);
-      }
-    }
-  }
-
-  return issues;
-
-}
-
-long int verifyTransposeGradientsPartialNorm(float * inputData, float * outputData, int width, int height, int gradientsNo){
-
-  long int issues = 0;
-  int limit = 40;
-
-  for(int g = 0; g < gradientsNo; g++){
-
-    for(int y = 0; y < height; y++){
-
-      for(int x = 0; x < width; x++){
-
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
         float inputValue = .0f;
         for(int i = 0; i < gradientsNo; i++){
           const float in = inputData[i * width * height + y * width + x];;
@@ -1436,8 +1210,4 @@ long int verifyTransposeGradientsPartialNorm(float * inputData, float * outputDa
   }
 
   return issues;
-<<<<<<< HEAD
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
-=======
->>>>>>> 21b92db8a0cc84bfb791c594ad2e43976ecf9a97
 }
