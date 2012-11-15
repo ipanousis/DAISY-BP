@@ -21,42 +21,31 @@
 #define max(a,b) (a > b ? a : b)
 
 #define DAISY_PROFILING
-#define DAISY_HOST_TRANSFER
+//#define DAISY_HOST_TRANSFER
 //#define DEBUG_ALL
 
 #ifndef OCL_DAISY_PROGRAMS
 #define OCL_DAISY_PROGRAMS
 typedef struct ocl_daisy_programs_tag{
-  cl_program program_f7;
-  cl_program program_gX;
-  cl_program program_gY;
-  cl_program program_gAll;
-  cl_program program_f13;
-  cl_program program_f23;
-  cl_program program_f29;
-  cl_program program_fAny;
-  cl_program program_trans;
-  cl_kernel kernel_f7x;
-  cl_kernel kernel_f7y;
-  cl_kernel kernel_gX;
-  cl_kernel kernel_gY;
-  cl_kernel kernel_gAll;
-  cl_kernel kernel_f11x;
-  cl_kernel kernel_f11y;
-  cl_kernel kernel_f23x;
-  cl_kernel kernel_f23y;
-  cl_kernel kernel_f29x;
-  cl_kernel kernel_f29y;
-  cl_kernel kernel_fAny;
-  cl_kernel kernel_gAny;
+  cl_kernel kernel_denx;
+  cl_kernel kernel_deny;
+  cl_kernel kernel_grad;
+  cl_kernel kernel_G0x;
+  cl_kernel kernel_G0y;
+  cl_kernel kernel_G1x;
+  cl_kernel kernel_G1y;
+  cl_kernel kernel_G2x;
+  cl_kernel kernel_G2y;
   cl_kernel kernel_trans;
   cl_kernel kernel_transd;
+  cl_kernel kernel_transdp;
 } ocl_daisy_programs;
 #endif
 
 #ifndef DAISY_PARAMS
 
 #define SMOOTHINGS_NO 3
+#define SIGMA_DEN 0.5f
 #define SIGMA_A 2.5f
 #define SIGMA_B 5.0f
 #define SIGMA_C 7.5f
@@ -108,6 +97,8 @@ typedef struct time_params_tag{
 
   short int measureDeviceHostTransfers;
 
+  short int displayRuntimes;
+
 } time_params;
 #endif
 
@@ -118,4 +109,6 @@ int initOcl(ocl_daisy_programs*, ocl_constructs *);
 int oclDaisy(daisy_params *, ocl_constructs *, time_params *);
 
 void unpadDescriptorArray(daisy_params *);
+
+int oclCleanUp(ocl_daisy_programs *, ocl_constructs *, int);
 

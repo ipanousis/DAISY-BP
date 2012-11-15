@@ -1,18 +1,8 @@
-//
-//
-//  Project  : DAISY in OpenCL
-//  Author   : Ioannis Panousis - ip223@bath.ac.uk
-//  Creation : February/2012
-//
-//  File: daisyKernels.cl
-//
-//
-
 #define CONVX_GROUP_SIZE_X 16
 #define CONVX_GROUP_SIZE_Y 8
 #define CONVX_WORKER_STEPS 4
 
-__kernel void convolve_Denx(__global   float * massArray,
+__kernel void convolve_denx(__global   float * massArray,
                           __constant float  * fltArray,
                           const      int     pddWidth,
                           const      int     pddHeight)
@@ -49,7 +39,7 @@ __kernel void convolve_Denx(__global   float * massArray,
 #define CONVY_GROUP_SIZE_Y 8
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_Deny(__global   float * massArray,
+__kernel void convolve_deny(__global   float * massArray,
                           __constant float * fltArray,
                           const      int     pddWidth,
                           const      int     pddHeight)
@@ -81,11 +71,11 @@ __kernel void convolve_Deny(__global   float * massArray,
   }
 }
 
-__kernel void gradient_all(__global float * massArray,
+__kernel void gradients(__global float * massArray,
                             const    int     pddWidth,
                             const    int     pddHeight)
 {
-  
+
   const int r = get_global_id(0) / pddWidth;
   const int c = get_global_id(0) % pddWidth;
   const int srcOffset = pddWidth * pddHeight * 8 + r * pddWidth + c;
@@ -359,6 +349,7 @@ __kernel void convolve_G2y(__global   float * massArray,
   }
 }
 
+#define SMOOTHINGS_NO 3
 #define GRADIENT_NUM 8
 #define TOTAL_PETALS_NO 25
 #define REGION_PETALS_NO 8
@@ -404,7 +395,8 @@ __kernel void transposeGradients(__global float * srcArray,
     const int dstRow = smoothSection * srcHeight + groupRow;
     const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
 
-    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX];// * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
+    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = dstRow * srcWidth * GRADIENT_NUM + dstCol;
+//    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX];// * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
 }
 
 //#define TRANSD_BLOCK_WIDTH 512
@@ -506,4 +498,85 @@ __kernel void transposeDaisy(__global   float * srcArray,
     }
   }
 }
+
+#define TRANSD_FAST_STEPS 4
+#define TRANSD_FAST_WG_Y 1
+#define TRANSD_FAST_WG_X 64
+#define TRANSD_FAST_PETAL_PAIRS 4
+#define TRANSD_FAST_PETAL_PADDING 1
+//## not robust to WG_Y change
+__kernel void transposeDaisyPairs(__global  float * srcArray,
+                                  __global  float * dstArray,
+                                  const     int     srcWidth,
+                                  const     int     srcHeight,
+                                  const     int     petalTwoY,
+                                  const     int     petalTwoX, // offset in pixels
+                                  const     int     petalOutOffset) // offset in petals = pixels * totalPetals + petalNo
+{
+
+  const int lx = get_local_id(0);
+
+  const int sourceY = get_global_id(1) % srcHeight;
+
+  __local float lclArray[TRANSD_FAST_WG_Y * TRANSD_FAST_WG_X * TRANSD_FAST_STEPS];
+
+  if(lx >= TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM){
+
+    if(sourceY + petalTwoY < 0 || sourceY + petalTwoY >= srcHeight){
+
+      for(int k = 0; k < TRANSD_FAST_STEPS; k++)
+        lclArray[(k+TRANSD_FAST_STEPS-1) * TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM + lx] = 0;
+
+    }
+    else{
+
+      int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENT_NUM)) + (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM)) / GRADIENT_NUM + petalTwoX;
+
+      const int offset = ((get_global_id(1) + petalTwoY) * srcWidth) * GRADIENT_NUM + lx % GRADIENT_NUM;
+
+      for(int k = 0; k < TRANSD_FAST_STEPS; k++, sourceX += TRANSD_FAST_PETAL_PAIRS){
+
+        lclArray[(k+TRANSD_FAST_STEPS-1) * TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM + lx] = (
+          
+          (sourceX < 0 || sourceX >= srcWidth) ? 0 : 
+           srcArray[offset + sourceX * GRADIENT_NUM]);
+
+      }
+    }
+  }
+  else{
+
+    int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENT_NUM)) + (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM)) / GRADIENT_NUM;
+
+    for(int k = 0; k < TRANSD_FAST_STEPS; k++, sourceX += TRANSD_FAST_PETAL_PAIRS)
+      lclArray[k * TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM + lx] = srcArray[(get_global_id(1) * srcWidth + sourceX) * GRADIENT_NUM + lx % GRADIENT_NUM];
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  const int targetY = sourceY + (petalOutOffset / TOTAL_PETALS_NO) / srcWidth;
+
+  if(targetY < 0 || targetY >= srcHeight) return;
+
+  int targetX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENT_NUM)) + (petalOutOffset / TOTAL_PETALS_NO) % srcWidth + lx / (GRADIENT_NUM * 2);
+
+  int targetPetalOffset = ((targetY * srcWidth + targetX) * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + abs(petalOutOffset % TOTAL_PETALS_NO) + TRANSD_FAST_PETAL_PADDING) * GRADIENT_NUM;
+
+  int localOffset = (TRANSD_FAST_PETAL_PAIRS * TRANSD_FAST_STEPS * ((lx / GRADIENT_NUM) % 2) + (lx / GRADIENT_NUM)/2) * GRADIENT_NUM + lx % GRADIENT_NUM;
+
+  for(int k = 0; k < TRANSD_FAST_STEPS; k++, 
+                                        targetX += TRANSD_FAST_PETAL_PAIRS, 
+                                        targetPetalOffset += TRANSD_FAST_PETAL_PAIRS * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) * GRADIENT_NUM,
+                                        localOffset += TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM){
+
+    // kill target petals outside
+    if(targetX < 0 || targetX >= srcWidth) continue;
+
+    // get target petal offset
+    dstArray[targetPetalOffset + lx % (GRADIENT_NUM * 2)] = lclArray[localOffset];
+
+  }
+
+}
+
 

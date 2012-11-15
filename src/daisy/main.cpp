@@ -21,15 +21,13 @@ void displayTimes(daisy_params * daisy,time_params * times);
 
 int main( int argc, char **argv  )
 {
-  struct timeval startTime,endTime;
 
   char* filename = NULL;
   uchar* srcArray = NULL;
   int width, height;
 
+  short int saveBinary = 0;
   int counter = 1;
-
-  gettimeofday(&startTime,NULL);
 
   // Get command line options
   if(argc > counter+1 && (!strcmp("-i", argv[counter]) || !strcmp("--image", argv[counter]))){
@@ -50,12 +48,11 @@ int main( int argc, char **argv  )
 
     daisy_params * daisy = newDaisyParams(srcArray, height, width, NO_GRADIENTS, REGION_PETALS_NO, SMOOTHINGS_NO);
 
-    double start,end,diff;
-
     time_params times;
     times.measureDeviceHostTransfers = 1;
     times.transPinned = 0;
     times.transRam = 0;
+    times.displayRuntimes = 1;
 
     initOcl(daisyPrograms,daisyCl);
 
@@ -63,20 +60,17 @@ int main( int argc, char **argv  )
 
     oclDaisy(daisy, daisyCl, &times);
 
-    //printf("Paired Offsets: %d\n",pairedOffsetsLength);
-    //printf("Actual Pairs: %d\n",actualPairs);
+    if(times.displayRuntimes)
+      displayTimes(daisy,&times);
 
-    displayTimes(daisy,&times);
+    if(saveBinary){
+      string binaryfile = filename;
+      binaryfile += ".bdaisy";
 
-    string binaryfile = filename;
-    binaryfile += ".bdaisy";
-
-    printf("Saving binary as %s...\n",filename);
-    unpadDescriptorArray(daisy);
-
-    kutility::save_binary(binaryfile, daisy->descriptors, daisy->height * daisy->width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
-
-    gettimeofday(&endTime,NULL);
+      printf("Saving binary as %s...\n",filename);
+      unpadDescriptorArray(daisy);
+      kutility::save_binary(binaryfile, daisy->descriptors, daisy->height * daisy->width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+    }
 
     free(daisy->array);
   }
@@ -131,7 +125,9 @@ int main( int argc, char **argv  )
     for(int i = 0; i < heights[total-1]*widths[total-1]; i++)
       array[i] = i % 255;
 
-    fprintf(csvOut,"height,width,grad,convonly,convmiddlex,convgrad,transA,transB,transBhost,transBtopinned,transBtoram,whole,wholestd,dataTransfer,iterations,success\n");
+    fprintf(csvOut,"height,width,grad,convonly,convmiddlex,convgrad,\
+transA,transB,transBhost,transBtopinned,transBtoram,\
+whole,wholestd,dataTransfer,iterations,success\n");
 
     char* templateRow = "%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d\n";
 
@@ -202,16 +198,18 @@ int main( int argc, char **argv  )
 
       double wholeStd = getStd(wholeTimes,iterations);
 
-//"height,width,grad,convonly,convmiddlex,convgrad,transA,transB,transBhost,transBtopinned,transBtoram,whole,wholestd,dataTransfer,iterations,success\n"
-      fprintf(csvOut, templateRow, height, width, t_grad, t_conv, t_convx, t_convGrad, t_transA, t_transB, t_transBhost, t_transPinned, t_transRam, t_whole, wholeStd,
-                      times.measureDeviceHostTransfers, iterations, success);
+      /*"height,width,grad,convonly,convmiddlex,convgrad,
+         transA,transB,transBhost,transBtopinned,transBtoram,
+         whole,wholestd,dataTransfer,iterations,success\n"*/
+      fprintf(csvOut, templateRow, height, width, t_grad, t_conv, t_convx, t_convGrad, 
+                  t_transA, t_transB, t_transBhost, t_transPinned, t_transRam, 
+                  t_whole, wholeStd, times.measureDeviceHostTransfers, iterations, success);
 
     }
     
     // print name of output file
     fclose(csvOut);
     printf("Speed test results written to %s.\n", csvOutName);
-//    free(daisy->descriptors);
     free(array);
   }
   else{
