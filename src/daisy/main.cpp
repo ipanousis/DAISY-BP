@@ -255,7 +255,7 @@ int main( int argc, char **argv  )
       double t_transBhost = 0;
       double t_whole = 0;
 
-      times.measureDeviceHostTransfers = 1;
+      times.measureDeviceHostTransfers = 0;
 
       daisy = newDaisyParams(array, height, width, 8, 8, 3, NULL);
       daisy->oclPrograms = daisyPrograms;

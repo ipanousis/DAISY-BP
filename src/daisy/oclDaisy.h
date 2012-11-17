@@ -9,7 +9,7 @@
 
 #define DAISY_PROFILING
 //#define DAISY_HOST_TRANSFER
-#define DAISY_NO_DESCRIPTORS
+//#define DAISY_NO_DESCRIPTORS
 
 #ifdef DAISY_PROFILING
 typedef struct time_params_tag{
