@@ -564,7 +564,8 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   cl_event * memoryEvents = (cl_event*)malloc(sizeof(cl_event) * totalSections);
   cl_event * kernelEvents = (cl_event*)malloc(sizeof(cl_event) * totalSections * daisy->smoothingsNo * REGION_PETALS_NO);
 
-  clFinish(daisyCl->queue);
+  error = clFinish(daisyCl->queue);
+  if(oclError("oclDaisy","clFinish (pre transdp)",error)) return oclCleanUp(&daisy->oclPrograms,daisyCl,error);
 
   // For each 512x512 section
     // For each sigma
@@ -625,8 +626,11 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
       size_t daisyWorkerOffsets[2] = {sectionX * daisyBlockWidth, petalRegion * daisy->paddedHeight + sectionY * daisyBlockHeight};
 
+//      printf("\nWorkerSize X,Y: %d,%d || WorkerOffset X,Y: %d,%d || PetalOutOffset: %d",
+//             daisyWorkerSize[0],daisyWorkerSize[1],daisyWorkerOffsets[0],daisyWorkerOffsets[1],petalOutOffset);
+
       clSetKernelArg(daisy->oclPrograms.kernel_transdp, 0, sizeof(transBuffer), (void*)&transBuffer);
-      clSetKernelArg(daisy->oclPrograms.kernel_transdp, 1, sizeof(daisyBuffer), (void*)&daisyBuffer);
+      clSetKernelArg(daisy->oclPrograms.kernel_transdp, 1, sizeof(daisyBufferA), (void*)&daisyBufferA);
       clSetKernelArg(daisy->oclPrograms.kernel_transdp, 2, sizeof(int), (void*)&paddedWidth);
       clSetKernelArg(daisy->oclPrograms.kernel_transdp, 3, sizeof(int), (void*)&paddedHeight);
       clSetKernelArg(daisy->oclPrograms.kernel_transdp, 4, sizeof(int), (void*)&petalTwoOffY);
@@ -641,12 +645,18 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
       if(oclError("oclDaisy","clEnqueueNDRangeKernel (daisy block)",error)) return oclCleanUp(&daisy->oclPrograms,daisyCl,error);
 
+      error = clFinish(daisyCl->queue);
+      char * finishstr = (char*)malloc(sizeof(char) * 200);
+      sprintf(finishstr,"clFinish (end block:%d)",petalNo);
+      if(oclError("oclDaisy",finishstr,error)) return oclCleanUp(&daisy->oclPrograms,daisyCl,error);
+
     }
 
 #ifdef DAISY_HOST_TRANSFER
     int y;
 
     if(sectionNo > 0){
+
 
       int descriptorsOffset = ((sectionY-1) * daisyBlockHeight * daisyBlockWidth + 
                                sectionX * daisyBlockWidth) * daisy->totalPetalsNo * daisy->gradientsNo;
@@ -713,9 +723,6 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   */
 
   }
-
-  error = clFinish(daisyCl->queue);
-  if(oclError("oclDaisy","clFinish (end)",error)) return oclCleanUp(&daisy->oclPrograms,daisyCl,error);
 
   gettimeofday(&times->endTransDaisy,NULL);
 
