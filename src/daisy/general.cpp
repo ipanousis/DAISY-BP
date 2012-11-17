@@ -50,19 +50,20 @@ void generatePyramidSettings(daisy_params * params){
     if(s == 0)
       sigma = params->sigmas[0];
     else{
-      sigma = sqrt(pow(params->sigmas[s],2) - pow(params->sigmas[s-1],2)) / pow((DOWNSAMPLE_RATE / 2),params->pyramidLayerSettings[s-1]->t_downsample);
+      sigma = sqrt(pow(params->sigmas[s],2) - pow(params->sigmas[s-1],2)) / pow(DOWNSAMPLE_RATE,params->pyramidLayerSettings[s-1]->t_downsample);
     }
   
     int prevTotalDownsample = (s > 0 ? params->pyramidLayerSettings[s-1]->t_downsample : 0);
 
     params->pyramidLayerSettings[s] = newPyramidLayerSetting(sigma,params->sigmas[s],prevTotalDownsample);
 
-    int totalDownsample = pow(DOWNSAMPLE_RATE,params->pyramidLayerSettings[s]->t_downsample);
+    int totalDownsample = pow(DOWNSAMPLE_RATE * 2,params->pyramidLayerSettings[s]->t_downsample);
 
     params->pyramidLayerSizes[s] = (params->paddedHeight * params->paddedWidth * params->gradientsNo) / totalDownsample;
     params->pyramidLayerOffsets[s] = (s > 0 ? params->pyramidLayerOffsets[s-1] + params->pyramidLayerSizes[s-1] : 0);
 
-    printf("sigma computed at level %d: %f\n",s,sigma);
+    //printf("\nsigma computed at level %d: %f",s,sigma);
+    //printf("\ndownsample setting for level %d: %dx%d (%d)",s,(int)(params->paddedHeight / sqrt(totalDownsample)),(int)(params->paddedWidth / sqrt(totalDownsample)),(int)sqrt(totalDownsample));
   }
 
 }

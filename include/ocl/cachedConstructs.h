@@ -1,5 +1,5 @@
 #include <CL/cl.h>
-//#include <CL/cl_gl.h>
+#include <CL/cl_gl.h>
 //#include <GL/glx.h>
 
 #ifndef OPENCL_CACHED_CONSTRUCTS

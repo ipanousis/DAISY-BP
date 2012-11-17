@@ -185,7 +185,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
 
   // how much memory will be required to store the temporary output of convolveX for the first layer (the largest layer)
   long int tempPyramidSize = (daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo) / 
-                              pow(DOWNSAMPLE_RATE / 2, daisy->pyramidLayerSettings[0]->t_downsample);
+                              pow(DOWNSAMPLE_RATE, daisy->pyramidLayerSettings[0]->t_downsample);
   tempPyramidSize = max(tempPyramidSize, 2 * daisy->paddedHeight * daisy->paddedWidth);
 
   // either the non-downsampled gradients plus the first half-downsampled convolution output will be greater
@@ -400,10 +400,10 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
 
     pyramid_layer_set* layerSettings = daisy->pyramidLayerSettings[layer];
 
-    int totalDownsample = pow(DOWNSAMPLE_RATE / 2, (layer > 0?daisy->pyramidLayerSettings[layer-1]->t_downsample:0));
+    int totalDownsample = pow(DOWNSAMPLE_RATE, (layer > 0?daisy->pyramidLayerSettings[layer-1]->t_downsample:0));
 
     int filterRadius = gaussianFilterSizes[layer] / 2;
-    int filterDownsample = pow(DOWNSAMPLE_RATE / 2, layerSettings->downsample);
+    int filterDownsample = pow(DOWNSAMPLE_RATE, layerSettings->downsample);
 
     int layerWidth = daisy->paddedWidth / totalDownsample;
     int layerHeight = daisy->paddedHeight / totalDownsample;
@@ -528,7 +528,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
 
   for(int layer = 0; layer < daisy->smoothingsNo; layer++){
     
-    int totalDownsample = pow(sqrt(DOWNSAMPLE_RATE), daisy->pyramidLayerSettings[layer]->t_downsample);
+    int totalDownsample = pow(sqrt(DOWNSAMPLE_RATE * 2), daisy->pyramidLayerSettings[layer]->t_downsample);
     int layerWidth = daisy->paddedWidth / totalDownsample;
     int layerHeight = daisy->paddedHeight / totalDownsample;
 
@@ -658,7 +658,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * ocl, time_params * times){
 
       //int srcGlobalOffset = daisy->paddedHeight * daisy->paddedWidth * daisy->gradientsNo * smoothingNo;
       int srcGlobalOffset = daisy->pyramidLayerOffsets[smoothingNo];
-      int totalDownsample = pow(sqrt(DOWNSAMPLE_RATE), layerSettings->t_downsample);
+      int totalDownsample = pow(sqrt(DOWNSAMPLE_RATE * 2), layerSettings->t_downsample);
 
       int petalStart = smoothingNo * 8 + (smoothingNo > 0);
 

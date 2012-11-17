@@ -9,8 +9,8 @@
 #define SMOOTHINGS_NO 3
 
 // downsample for each sigma of PHI_SIGMA_DOWNSAMPLE
-#define PHI_SIGMA_DOWNSAMPLE 1.0f
-#define DOWNSAMPLE_RATE 4
+#define PHI_SIGMA_DOWNSAMPLE 2.0f
+#define DOWNSAMPLE_RATE 2
 
 #define ARRAY_PADDING 256
 

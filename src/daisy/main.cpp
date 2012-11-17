@@ -199,7 +199,7 @@ int main( int argc, char **argv  )
     initOcl(daisyPrograms,daisyCl);
 
     // initialise loop variables, input range numbers etc..
-    struct tm * sysTime = NULL;                     
+    struct tm * sysTime = NULL;
 
     time_t timeVal = 0;                            
     timeVal = time(NULL);                          
@@ -241,7 +241,7 @@ int main( int argc, char **argv  )
       int width = widths[w];
       int height = heights[w];
 
-      printf("%dx%d\n",height,width);
+      printf("\n%dx%d",height,width);
 
       int iterations = 25;
       int success = 0;
@@ -257,7 +257,7 @@ int main( int argc, char **argv  )
 
       times.measureDeviceHostTransfers = 0;
 
-      daisy = newDaisyParams(array, height, width, 8, 8, 3, NULL);
+      daisy = newDaisyParams(array, height, width, 8, 8, 3, sigmas);
       daisy->oclPrograms = daisyPrograms;
 
       for(int i = 0; i < iterations; i++){
