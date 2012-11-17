@@ -205,25 +205,31 @@ int main( int argc, char **argv  )
     timeVal = time(NULL);                          
     sysTime = localtime(&timeVal);
 
-    char * csvOutName = (char*)malloc(sizeof(char) * 500);
-    sprintf(csvOutName, "gdaisy-speed-tests-%02d%02d-%02d%02d.csv", sysTime->tm_mon+1, sysTime->tm_mday, sysTime->tm_hour, sysTime->tm_min);
-
-    FILE * csvOut = fopen(csvOutName,"w");
+    short int MEASURE_TRANSFERS = 0;
 
     /* Standard ranges QVGA,VGA,SVGA,XGA,SXGA,SXGA+,UXGA,QXGA*/
     int heights[8] = {320,640,800,1024,1280,1400,1600,2048};
     int widths[8] = {240,480,600,768,1024,1050,1200,1536};
     int total = 8;
+    const char * label = "STANDARD";
 
     /* Without transfer ranges */
     /*int heights[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
     int widths[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
     int total = 12;*/
-    
+    //const char * label = "SQUARE";
+
     /* With transfer ranges */
     /*int heights[4] = {128,256,384,512};//,640,768,896,1024,1152,1280,1408,1536};
     int widths[4] = {128,256,384,512};//,640,768,896,1024,1152,1280,1408,1536};
     int total = 4;//12;*/
+
+    const char * transfer = (MEASURE_TRANSFERS ? "WT" : "NT");
+
+    char * csvOutName = (char*)malloc(sizeof(char) * 500);
+    sprintf(csvOutName, "gdaisy-speeds-DS-%s-%s-%02d%02d-%02d%02d.csv", label, transfer, sysTime->tm_mon+1, sysTime->tm_mday, sysTime->tm_hour, sysTime->tm_min);
+
+    FILE * csvOut = fopen(csvOutName,"w");
 
     // allocate the memory
     unsigned char * array = (unsigned char *)malloc(sizeof(unsigned char) * heights[total-1] * widths[total-1]);
@@ -255,7 +261,7 @@ int main( int argc, char **argv  )
       double t_transBhost = 0;
       double t_whole = 0;
 
-      times.measureDeviceHostTransfers = 0;
+      times.measureDeviceHostTransfers = MEASURE_TRANSFERS;
 
       daisy = newDaisyParams(array, height, width, 8, 8, 3, sigmas);
       daisy->oclPrograms = daisyPrograms;
@@ -304,6 +310,18 @@ double timeDiff(struct timeval start, struct timeval end){
   return (end.tv_sec+(end.tv_usec/1000000.0)) - (start.tv_sec+(start.tv_usec/1000000.0));
 
 }
+
+/*
+void displayTimes(daisy_params * daisy, time_params * times){
+
+  printf("grad: %.4f sec\n",timeDiff(times->startGrad,times->endGrad));
+  printf("conv: %.4f sec\n",timeDiff(times->startConv,times->endConv));
+  printf("convx: %.4f sec\n",timeDiff(times->startConvX,times->endConvX));
+  printf("transPinned: %.4f sec\n",times->transPinned);
+  printf("transRam: %.4f sec\n",times->transRam);
+  printf("daisyFull: %.4f sec\n",timeDiff(times->startFull,times->endFull));
+
+}*/
 
 double getStd(double * observations, int length){
 
