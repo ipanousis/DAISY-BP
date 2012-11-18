@@ -46,7 +46,7 @@ int main( int argc, char **argv  )
     ocl_constructs * daisyCl = newOclConstructs(0,0,0);
     ocl_daisy_programs * daisyPrograms = (ocl_daisy_programs*)malloc(sizeof(ocl_daisy_programs));
 
-    daisy_params * daisy = newDaisyParams(srcArray, height, width, NO_GRADIENTS, REGION_PETALS_NO, SMOOTHINGS_NO);
+    daisy_params * daisy = newDaisyParams(srcArray, height, width, GRADIENTS_NO, REGION_PETALS_NO, SMOOTHINGS_NO);
 
     time_params times;
     times.measureDeviceHostTransfers = 1;
@@ -94,14 +94,14 @@ int main( int argc, char **argv  )
     sysTime = localtime(&timeVal);
 
     char * csvOutName = (char*)malloc(sizeof(char) * 500);
-    sprintf(csvOutName, "gdaisy-speed-tests-%02d%02d-%02d%02d.csv", sysTime->tm_mon+1, sysTime->tm_mday, sysTime->tm_hour, sysTime->tm_min);
+    sprintf(csvOutName, "gdaisy-speeds-FAST-STANDARD-NT-%02d%02d-%02d%02d.csv", sysTime->tm_mon+1, sysTime->tm_mday, sysTime->tm_hour, sysTime->tm_min);
 
     FILE * csvOut = fopen(csvOutName,"w");
 
     /* Standard ranges QVGA,VGA,SVGA,XGA,SXGA,SXGA+,UXGA,QXGA*/
-    //int heights[8] = {320,640,800,1024,1280,1400,1600,2048};
-    //int widths[8] = {240,480,600,768,1024,1050,1200,1536};
-    //int total = 8;
+//    int heights[8] = {320,640,800,1024,1280,1400,1600,2048};
+//    int widths[8] = {240,480,600,768,1024,1050,1200,1536};
+//    int total = 8;
 
     /* Without transfer ranges */
     int heights[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
@@ -157,7 +157,7 @@ whole,wholestd,dataTransfer,iterations,success\n");
 
       times.measureDeviceHostTransfers = 0;
 
-      daisy = newDaisyParams(array, height, width, NO_GRADIENTS, REGION_PETALS_NO, SMOOTHINGS_NO);
+      daisy = newDaisyParams(array, height, width, GRADIENTS_NO, REGION_PETALS_NO, SMOOTHINGS_NO);
       daisy->oclPrograms = *daisyPrograms;
 
       for(int i = 0; i < iterations; i++){

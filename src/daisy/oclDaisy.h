@@ -22,7 +22,7 @@
 
 #define DAISY_PROFILING
 //#define DAISY_HOST_TRANSFER
-//#define DEBUG_ALL
+//#define CPU_VERIFICATION
 
 #ifndef OCL_DAISY_PROGRAMS
 #define OCL_DAISY_PROGRAMS
@@ -39,18 +39,20 @@ typedef struct ocl_daisy_programs_tag{
   cl_kernel kernel_trans;
   cl_kernel kernel_transd;
   cl_kernel kernel_transdp;
+  cl_kernel kernel_transds;
 } ocl_daisy_programs;
 #endif
-
-#ifndef DAISY_PARAMS
 
 #define SMOOTHINGS_NO 3
 #define SIGMA_DEN 0.5f
 #define SIGMA_A 2.5f
 #define SIGMA_B 5.0f
 #define SIGMA_C 7.5f
-#define NO_GRADIENTS 8
+#define GRADIENTS_NO 8
 #define REGION_PETALS_NO 8
+#define TOTAL_PETALS_NO (SMOOTHINGS_NO * REGION_PETALS_NO + 1)
+
+#ifndef DAISY_PARAMS
 
 #define DAISY_PARAMS
 typedef struct daisy_params_tag{

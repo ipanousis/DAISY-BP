@@ -350,7 +350,7 @@ __kernel void convolve_G2y(__global   float * massArray,
 }
 
 #define SMOOTHINGS_NO 3
-#define GRADIENT_NUM 8
+#define GRADIENTS_NO 8
 #define TOTAL_PETALS_NO 25
 #define REGION_PETALS_NO 8
 #define TRANS_GROUP_SIZE_X 32
@@ -362,7 +362,7 @@ __kernel void transposeGradients(__global float * srcArray,
                                  const    int     srcHeight)
 {
 
-    const int smoothSectionHeight = srcHeight * GRADIENT_NUM;
+    const int smoothSectionHeight = srcHeight * GRADIENTS_NO;
 
     const int smoothSection = get_global_id(1) / smoothSectionHeight;
 
@@ -383,20 +383,20 @@ __kernel void transposeGradients(__global float * srcArray,
     //
     // Normalisation piggy-backing along with the transposition
     //
-    /*float l2normSum = .0f;
-    for(int i = 0; i < GRADIENT_NUM; i++){
-      const float g = lclArray[((localY+i) % GRADIENT_NUM) * (TRANS_GROUP_SIZE_X+2) + localX];
+    float l2normSum = .0f;
+    for(int i = 0; i < GRADIENTS_NO; i++){
+      const float g = lclArray[((localY+i) % GRADIENTS_NO) * (TRANS_GROUP_SIZE_X+2) + localX];
       l2normSum += g*g;
     }
-    l2normSum = (l2normSum == 0.0 ? 1 : 1 / sqrt(l2normSum));*/
+    l2normSum = (l2normSum == 0.0 ? 1 : 1 / sqrt(l2normSum));
     //
     //
 
     const int dstRow = smoothSection * srcHeight + groupRow;
-    const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENT_NUM + localX * GRADIENT_NUM + localY;
+    const int dstCol = get_group_id(0) * TRANS_GROUP_SIZE_X * GRADIENTS_NO + localX * GRADIENTS_NO + localY;
 
-    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = dstRow * srcWidth * GRADIENT_NUM + dstCol;
-//    dstArray[dstRow * srcWidth * GRADIENT_NUM + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX];// * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
+    //dstArray[dstRow * srcWidth * GRADIENTS_NO + dstCol] = dstRow * srcWidth * GRADIENTS_NO + dstCol; // USED FOR INDEX TRACKING
+    dstArray[dstRow * srcWidth * GRADIENTS_NO + dstCol] = lclArray[localY * (TRANS_GROUP_SIZE_X+2) + localX] * l2normSum; // this division... the division ALONE... seems to take 10 ms !!!
 }
 
 #define TRANSD_BLOCK_WIDTH 512
@@ -429,10 +429,10 @@ __kernel void transposeDaisy(__global   float * srcArray,
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
 
-  //__local float lclArray[TRANSD_DATA_WIDTH * (TRANSD_DATA_WIDTH * GRADIENT_NUM)];
+  //__local float lclArray[TRANSD_DATA_WIDTH * (TRANSD_DATA_WIDTH * GRADIENTS_NO)];
 
   // coalesced read (srcGlobalOffset + xid,yid) + padded write to lclArray
-  //const int stepsPerWorker = (srcWidth * GRADIENT_NUM) / get_global_size(0); // => globalSizeX must divide 512 (16,32,64,128,256)
+  //const int stepsPerWorker = (srcWidth * GRADIENTS_NO) / get_global_size(0); // => globalSizeX must divide 512 (16,32,64,128,256)
 
   // should be no divergence, whole workgroups take the same path because; 
   // srcWidth and srcHeight must be multiples of TRANSD_DATA_WIDTH = GROUP_SIZE_X = GROUP_SIZE_Y = 16
@@ -440,7 +440,7 @@ __kernel void transposeDaisy(__global   float * srcArray,
     const int stepsPerWorker = 8;
 
     for(int i = 0; i < stepsPerWorker; i++){
-      lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENT_NUM)      // local Y
+      lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENTS_NO)      // local Y
                 + get_local_size(0) * i + lx] =                               // local X
                                                 0;                            // outside border
     }
@@ -449,9 +449,9 @@ __kernel void transposeDaisy(__global   float * srcArray,
     const int stepsPerWorker = 8;
 
     for(int i = 0; i < stepsPerWorker; i++){
-      lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENT_NUM)        // local Y
+      lclArray[ly * (TRANSD_DATA_WIDTH * GRADIENTS_NO)        // local Y
                 + get_local_size(0) * i + lx] =                                 // local X
-          srcArray[srcGlobalOffset + gy * srcWidth * GRADIENT_NUM +             // global offset + global Y
+          srcArray[srcGlobalOffset + gy * srcWidth * GRADIENTS_NO +             // global offset + global Y
             ((gx / get_local_size(0)) * stepsPerWorker + i) * get_local_size(0) // global X
                                                + lx];
     }
@@ -468,10 +468,10 @@ __kernel void transposeDaisy(__global   float * srcArray,
   const int topLeftY = (get_group_id(1)-1) * TRANSD_DATA_WIDTH;
   const int topLeftX = (get_group_id(0)-1) * TRANSD_DATA_WIDTH;
 
-  //const int dstGroupOffset = (topLeftY * srcWidth + topLeftX) * GRADIENT_NUM * TOTAL_PETALS_NO;
-  dstArray += (topLeftY * srcWidth + topLeftX) * GRADIENT_NUM * TOTAL_PETALS_NO;
+  //const int dstGroupOffset = (topLeftY * srcWidth + topLeftX) * GRADIENTS_NO * TOTAL_PETALS_NO;
+  dstArray += (topLeftY * srcWidth + topLeftX) * GRADIENTS_NO * TOTAL_PETALS_NO;
 
-  const int petalStart = ((srcGlobalOffset / (srcWidth * GRADIENT_NUM)) / srcHeight) * REGION_PETALS_NO + (srcGlobalOffset > 0);
+  const int petalStart = ((srcGlobalOffset / (srcWidth * GRADIENTS_NO)) / srcHeight) * REGION_PETALS_NO + (srcGlobalOffset > 0);
 
   const int offset = (halfWarpId < (transArrayLength % pairsPerHalfWarp) ? halfWarpId : (transArrayLength % pairsPerHalfWarp));
   for(int p = pairsPerHalfWarp * halfWarpId + offset; 
@@ -491,26 +491,27 @@ __kernel void transposeDaisy(__global   float * srcArray,
     {     }
     else if(fromP2 != TRANSD_PAIRS_SINGLE_ONLY || (lx < 8)){
       const int intraHalfWarpOffset = (lx >= 8) * (fromP2-fromP1);
-      dstArray[(toOffsetY * srcWidth + toOffsetX) * GRADIENT_NUM * TOTAL_PETALS_NO
-               + (petalStart + petalNo) * GRADIENT_NUM + lx] =
-        lclArray[((fromP1+intraHalfWarpOffset) / TRANSD_DATA_WIDTH) * (TRANSD_DATA_WIDTH * GRADIENT_NUM) 
-               + ((fromP1+intraHalfWarpOffset) % TRANSD_DATA_WIDTH) * GRADIENT_NUM + lx % 8];
+      dstArray[(toOffsetY * srcWidth + toOffsetX) * GRADIENTS_NO * TOTAL_PETALS_NO
+               + (petalStart + petalNo) * GRADIENTS_NO + lx] =
+        lclArray[((fromP1+intraHalfWarpOffset) / TRANSD_DATA_WIDTH) * (TRANSD_DATA_WIDTH * GRADIENTS_NO) 
+               + ((fromP1+intraHalfWarpOffset) % TRANSD_DATA_WIDTH) * GRADIENTS_NO + lx % 8];
     }
   }
 }
 
 #define TRANSD_FAST_STEPS 4
 #define TRANSD_FAST_WG_Y 1
-#define TRANSD_FAST_WG_X 64
-#define TRANSD_FAST_PETAL_PAIRS 4
+#define TRANSD_FAST_WG_X 128
+#define TRANSD_FAST_PETAL_PAIRS 8
 #define TRANSD_FAST_PETAL_PADDING 1
 //## not robust to WG_Y change
 __kernel void transposeDaisyPairs(__global  float * srcArray,
                                   __global  float * dstArray,
                                   const     int     srcWidth,
                                   const     int     srcHeight,
+                                  const     int     blockHeight,
                                   const     int     petalTwoY,
-                                  const     int     petalTwoX, // offset in pixels
+                                  const     int     petalTwoX,      // offset in pixels
                                   const     int     petalOutOffset) // offset in petals = pixels * totalPetals + petalNo
 {
 
@@ -521,71 +522,94 @@ __kernel void transposeDaisyPairs(__global  float * srcArray,
   __local float lclArray[TRANSD_FAST_WG_Y * TRANSD_FAST_WG_X * TRANSD_FAST_STEPS];
 
   // fetch 
-  if(lx >= TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM){
+  if(lx >= TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO){
 
     if(sourceY + petalTwoY < 0 || sourceY + petalTwoY >= srcHeight){
 
       for(int k = 0; k < TRANSD_FAST_STEPS; k++)
-        lclArray[(k+TRANSD_FAST_STEPS-1) * TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM + lx] = 0;
+        lclArray[(k+TRANSD_FAST_STEPS-1) * TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO + lx] = 0;
 
     }
     else{
 
-      int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENT_NUM)) + (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM)) / GRADIENT_NUM + petalTwoX;
+      int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO)) / GRADIENTS_NO + petalTwoX;
 
-      const int offset = ((get_global_id(1) + petalTwoY) * srcWidth) * GRADIENT_NUM + lx % GRADIENT_NUM;
+      const int offset = ((get_global_id(1) + petalTwoY) * srcWidth) * GRADIENTS_NO + lx % GRADIENTS_NO;
 
       for(int k = 0; k < TRANSD_FAST_STEPS; k++, sourceX += TRANSD_FAST_PETAL_PAIRS){
 
-        lclArray[(k+TRANSD_FAST_STEPS-1) * TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM + lx] = (
+        lclArray[(k+TRANSD_FAST_STEPS-1) * TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO + lx] = (
           
           (sourceX < 0 || sourceX >= srcWidth) ? 0 : 
-           srcArray[offset + sourceX * GRADIENT_NUM]);
+           srcArray[offset + sourceX * GRADIENTS_NO]);
 
       }
     }
   }
   else{
 
-    int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENT_NUM)) + (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM)) / GRADIENT_NUM;
+    int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO)) / GRADIENTS_NO;
 
     for(int k = 0; k < TRANSD_FAST_STEPS; k++, sourceX += TRANSD_FAST_PETAL_PAIRS)
-      lclArray[k * TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM + lx] = srcArray[(get_global_id(1) * srcWidth + sourceX) * GRADIENT_NUM + lx % GRADIENT_NUM];
+      lclArray[k * TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO + lx] = srcArray[(get_global_id(1) * srcWidth + sourceX) * GRADIENTS_NO + lx % GRADIENTS_NO];
   }
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
   const int targetY = sourceY % ((TRANSD_BLOCK_WIDTH * TRANSD_BLOCK_WIDTH) / srcWidth) + (petalOutOffset / TOTAL_PETALS_NO) / srcWidth;
 
-  if(targetY < 0 || targetY >= (TRANSD_BLOCK_WIDTH * TRANSD_BLOCK_WIDTH) / srcWidth) return;
+  if(targetY < 0 || targetY >= blockHeight) return;
 
-  int targetX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENT_NUM)) + (petalOutOffset / TOTAL_PETALS_NO) % srcWidth + lx / (GRADIENT_NUM * 2);
+  int targetX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + (petalOutOffset / TOTAL_PETALS_NO) % srcWidth + lx / (GRADIENTS_NO * 2);
 
-//  int targetPetalOffset = ((targetY * srcWidth + targetX) * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + abs(petalOutOffset % TOTAL_PETALS_NO) + TRANSD_FAST_PETAL_PADDING) * GRADIENT_NUM;
-  int targetPetalOffset = ((targetY * srcWidth + targetX) * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + abs(petalOutOffset % TOTAL_PETALS_NO)) * GRADIENT_NUM;
+  int targetPetalOffset = ((targetY * srcWidth + targetX) * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + abs(petalOutOffset % TOTAL_PETALS_NO) + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO;
 
-  int localOffset = (TRANSD_FAST_PETAL_PAIRS * TRANSD_FAST_STEPS * ((lx / GRADIENT_NUM) % 2) + (lx / GRADIENT_NUM)/2) * GRADIENT_NUM + lx % GRADIENT_NUM;
+  int localOffset = (TRANSD_FAST_PETAL_PAIRS * TRANSD_FAST_STEPS * ((lx / GRADIENTS_NO) % 2) + (lx / GRADIENTS_NO)/2) * GRADIENTS_NO + lx % GRADIENTS_NO;
 
   for(int k = 0; k < TRANSD_FAST_STEPS; k++,
                                         targetX += TRANSD_FAST_PETAL_PAIRS, 
-                                        targetPetalOffset += TRANSD_FAST_PETAL_PAIRS * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) * GRADIENT_NUM,
-                                        localOffset += TRANSD_FAST_PETAL_PAIRS * GRADIENT_NUM){
+                                        targetPetalOffset += TRANSD_FAST_PETAL_PAIRS * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO,
+                                        localOffset += TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO){
 
     // kill target petals outside
     if(targetX < 0 || targetX >= srcWidth) continue;
 
     // get target petal offset
-    dstArray[targetPetalOffset + lx % (GRADIENT_NUM * 2)] = lclArray[localOffset];
+    dstArray[targetPetalOffset + lx % (GRADIENTS_NO * 2)] = lclArray[localOffset];
 
   }
 
 }
 
-__kernel void tranposeDaisySingles(){
+#define TRANSD_FAST_SINGLES_WG_Y 1
+#define TRANSD_FAST_SINGLES_WG_X 128
+__kernel void transposeDaisySingles(__global float * srcArray,
+                                    __global float * dstArray,
+                                    const    int     blockHeight){ // blockHeight should be the maximum, ie daisyBlockHeight from the .cpp
 
-  int gy = get_global_id(1);
-  int gx = get_global_id(0); // srcWidth * GRADIENT_NUM
+   // Moves from index range 0-srcWidth to 0-srcWidth*26, filling in petal no 1 out of 0-25
+   const int gy = get_global_id(1);
+   const int gx = get_global_id(0);
+   const int gsx = get_global_size(0);
 
-  
+   // no steps
+   dstArray[(((gy % blockHeight) * (gsx / GRADIENTS_NO) + gx / GRADIENTS_NO) * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + 
+              TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO + gx % GRADIENTS_NO] = srcArray[gy * gsx + gx];
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

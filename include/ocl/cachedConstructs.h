@@ -18,7 +18,8 @@ typedef struct ocl_constructs_tag{
   cl_device_id deviceId;
   cl_context context;
   cl_program program;
-  cl_command_queue queue;
+  cl_command_queue ioqueue;
+  cl_command_queue ooqueue;
   cl_mem * buffers;
   cl_kernel kernel;
   cl_context_properties* contextProperties;

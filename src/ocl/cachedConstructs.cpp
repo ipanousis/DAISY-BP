@@ -15,7 +15,7 @@ ocl_constructs * newOclConstructs(cl_uint workerSize, cl_uint groupSize, cl_bool
   occs->platformId = NULL;
   occs->deviceId = NULL;
   occs->context = NULL;
-  occs->queue = NULL;
+  occs->ioqueue = NULL;
   occs->program = NULL;
   occs->buffers = NULL;
   occs->kernel = NULL;
@@ -57,7 +57,9 @@ int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects)
     occs->context = clCreateContext(occs->contextProperties, 1, 
                                     &(occs->deviceId), NULL, NULL, &error);
 
-    occs->queue = clCreateCommandQueue(occs->context, occs->deviceId, 0, &error);
+    occs->ioqueue = clCreateCommandQueue(occs->context, occs->deviceId, 0, &error);
+    occs->ooqueue = clCreateCommandQueue(occs->context, occs->deviceId, 
+                                   CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &error);
 
     *rebuildMemoryObjects = 1;
 
@@ -68,8 +70,8 @@ int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects)
 
 void cleanupConstructs(ocl_constructs * occs){
 
-  clReleaseCommandQueue(occs->queue);
-  occs->queue = NULL;
+  clReleaseCommandQueue(occs->ioqueue);
+  occs->ioqueue = NULL;
   clReleaseContext(occs->context);
   occs->context = NULL;
   occs->deviceId = NULL;
