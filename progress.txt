@@ -1,22 +1,7 @@
 Progress:
-07/02/12 - Implemented DAISY up until all the smoothing/gradient kernels, 
-           the data on the GPU now needs to be transposed.... in a 4D type 
-           of transposition (AxBxCxD to CxDxAxB) ... fun! After this DAISY 
-           will be done and optimisations will need to be made, before 
-           proceeding to BP.
-03/03/12 - DAISY has been implemented in full and individual operations 
-           have been optimised (definitely the convolutions and first
-           transposition of gradients), the second transposition to desriptors
-           is complex but it has a structure to ensure coalesced reads/writes,
-           optimising it would be both time-consuming and also not very beneficial
-           given that the bottleneck of the whole computation is in the data
-           transfer back from the GPU. Whereas the descriptors cannot be kept
-           on GPU anyway because it's way too much data.
-           -->(idea to be explored next) downsampling to reduce the data
-           Speed measurements have been done, they will also be done properly
-           for the CPU version to have a robust comparison. The speedup however
-           has proven pretty good already and the functionality has also been
-           largely verified.
+18/11/12 - The x1.7 speed-up is in place and working. In brief, without transfer
+           back to RAM, dense DAISY can be done in 25 frames/sec for 1024x768 and
+           55 frames/sec for 640x480 images.
 
 15/05/12 - Gained a speed-up of x1.7 on the whole.
               
@@ -52,3 +37,23 @@ Progress:
               found to be a problem.
               
               ... PS3. There are always more speed-ups :)
+
+03/03/12 - DAISY has been implemented in full and individual operations 
+           have been optimised (definitely the convolutions and first
+           transposition of gradients), the second transposition to desriptors
+           is complex but it has a structure to ensure coalesced reads/writes,
+           optimising it would be both time-consuming and also not very beneficial
+           given that the bottleneck of the whole computation is in the data
+           transfer back from the GPU. Whereas the descriptors cannot be kept
+           on GPU anyway because it's way too much data.
+           -->(idea to be explored next) downsampling to reduce the data
+           Speed measurements have been done, they will also be done properly
+           for the CPU version to have a robust comparison. The speedup however
+           has proven pretty good already and the functionality has also been
+           largely verified.
+
+07/02/12 - Implemented DAISY up until all the smoothing/gradient kernels, 
+           the data on the GPU now needs to be transposed.... in a 4D type 
+           of transposition (AxBxCxD to CxDxAxB) ... fun! After this DAISY 
+           will be done and optimisations will need to be made, before 
+           proceeding to BP.
