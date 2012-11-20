@@ -64,17 +64,19 @@ The code in this repository is ready to be compiled and run by;
 > ./autogen.sh
 > make
 
-> ./gdaisy -i <input image>
+> ./gdaisy -i <input image> [-save]
 
-to extract features for an image and store them in a binary file with the
+to extract features for an image, and -save to store them in a binary file with the
 name <input image>.bdaisy
 
 or 
 
-> ./gdaisy -profile
+> ./gdaisy -profile [-save]
 
 if you want to run a series of runs to measure the speed of DAISY extraction
-on your GPU. This may take upto a few minutes depending on your GPU.
+on your GPU. Add -save to test speed including the transfer to RAM. This may 
+take upto a few minutes depending on your GPU. But well under a minute with a
+recent device.
 
 Portability
 ------------
