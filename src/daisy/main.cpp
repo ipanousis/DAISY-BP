@@ -30,7 +30,7 @@ int main( int argc, char **argv  )
   int counter = 1;
 
   // Get command line options
-  if(argc > counter+1 && (!strcmp("-i", argv[counter]) || !strcmp("--image", argv[counter]))){
+  if(argc > counter+1 && (!strcmp("-i", argv[counter]))){
 
     filename = argv[++counter];
     load_gray_image (filename, srcArray, height, width);
@@ -43,7 +43,7 @@ int main( int argc, char **argv  )
       return 1;
     }
 
-    saveBinary = (argc > counter && !strcmp("--save",argv[counter]));
+    saveBinary = (argc > counter && !strcmp("-save",argv[counter]));
 
     printf("HxW=%dx%d\n",height,width);
 
@@ -78,14 +78,8 @@ int main( int argc, char **argv  )
 
     // do the profiling across a range of inputs from 128x128 to 1536x1536
 
-    // initialise all the opencl stuff first outside loop
-    daisy_params * daisy;
-
-    ocl_constructs * daisyCl = newOclConstructs(0,0,0);
-
-    initOcl(daisy,daisyCl);
-
-    ocl_daisy_programs * daisyPrograms = &daisy->oclPrograms;
+    counter++;
+    saveBinary = (argc > counter && !strcmp("-save",argv[counter]));
 
     // initialise loop variables, input range numbers etc..
     struct tm * sysTime = NULL;                     
@@ -94,20 +88,26 @@ int main( int argc, char **argv  )
     timeVal = time(NULL);                          
     sysTime = localtime(&timeVal);
 
-    char * csvOutName = (char*)malloc(sizeof(char) * 500);
-    sprintf(csvOutName, "gdaisy-speeds-FAST-STANDARD-NT-%02d%02d-%02d%02d.csv", sysTime->tm_mon+1, sysTime->tm_mday, sysTime->tm_hour, sysTime->tm_min);
+    char * csvOutName = (char*)malloc(sizeof(char) * 200);
+    char * nameTemplate = (char*)malloc(sizeof(char) * 100);
+    if(saveBinary)
+      strcpy(nameTemplate,"gdaisy-speeds-FAST-STANDARD-TRANSFER-%02d%02d-%02d%02d.csv");
+    else
+      strcpy(nameTemplate,"gdaisy-speeds-FAST-STANDARD-NOTRANSFER-%02d%02d-%02d%02d.csv");
+
+    sprintf(csvOutName, nameTemplate, sysTime->tm_mon+1, sysTime->tm_mday, sysTime->tm_hour, sysTime->tm_min);
 
     FILE * csvOut = fopen(csvOutName,"w");
 
     /* Standard ranges QVGA,VGA,SVGA,XGA,SXGA,SXGA+,UXGA,QXGA*/
-//    int heights[8] = {320,640,800,1024,1280,1400,1600,2048};
-//    int widths[8] = {240,480,600,768,1024,1050,1200,1536};
-//    int total = 8;
+    int heights[8] = {320,640,800,1024,1280,1400,1600,2048};
+    int widths[8] = {240,480,600,768,1024,1050,1200,1536};
+    int total = 8;
 
     /* Without transfer ranges */
-    int heights[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
-    int widths[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
-    int total = 12;
+    //int heights[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
+    //int widths[12] = {128,256,384,512,640,768,896,1024,1152,1280,1408,1536};
+    //int total = 12;
 
     //#define BLOCK_SIZE 128
     //    int heights[8] = {BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE,BLOCK_SIZE};
@@ -131,6 +131,13 @@ transA,transB,transBhost,transBtopinned,transBtoram,\
 whole,wholestd,dataTransfer,iterations,success\n");
 
     char* templateRow = "%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d\n";
+
+    // initialise daisy and opencl
+    daisy_params * daisy = newDaisyParams(array, height, width, 0);
+    ocl_constructs * daisyCl = newOclConstructs(0,0,0);
+    ocl_daisy_programs * daisyPrograms = &daisy->oclPrograms;
+
+    initOcl(daisy,daisyCl);
 
     for(int w = 0; w < total; w++){
 
@@ -158,7 +165,7 @@ whole,wholestd,dataTransfer,iterations,success\n");
 
       times.measureDeviceHostTransfers = 0;
 
-      daisy = newDaisyParams(array, height, width, 0);
+      daisy = newDaisyParams(array,height,width,0);
       daisy->oclPrograms = *daisyPrograms;
 
       for(int i = 0; i < iterations; i++){
