@@ -8,6 +8,7 @@
 
 */
 #include "ocl/cachedConstructs.h"
+#include <stdio.h>
 
 ocl_constructs * newOclConstructs(cl_uint workerSize, cl_uint groupSize, cl_bool clGlSharing){
 
@@ -36,7 +37,7 @@ ocl_constructs * newOclConstructs(cl_uint workerSize, cl_uint groupSize, cl_bool
   return occs;
 }
 
-int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects){
+int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects, int kernelQueues){
 
   cl_int error = 0;
   *rebuildMemoryObjects = 0;
@@ -45,11 +46,20 @@ int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects)
     return 1;
 
   if(occs->platformId == NULL){
-
     error = clGetPlatformIDs(1, &(occs->platformId), NULL);
+
+    if(error){
+      fprintf(stderr, "cachedConstructs.cpp::%s %s failed: %d\n","buildCachedConstructs","clGetPlatformIDs",error);
+      return error;
+    }
 
     error = clGetDeviceIDs(occs->platformId, CL_DEVICE_TYPE_GPU, 1, 
                            &(occs->deviceId), NULL);
+
+    if(error){
+      fprintf(stderr, "cachedConstructs.cpp::%s %s failed: %d\n","buildCachedConstructs","clGetDeviceIDs",error);
+      return error;
+    }
 
     if(occs->contextProperties != NULL)
       occs->contextProperties[5] = (cl_context_properties)(occs->platformId);
@@ -58,6 +68,7 @@ int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects)
                                     &(occs->deviceId), NULL, NULL, &error);
 
     occs->ioqueue = clCreateCommandQueue(occs->context, occs->deviceId, 0, &error);
+
     occs->ooqueue = clCreateCommandQueue(occs->context, occs->deviceId, 
                                    CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &error);
 

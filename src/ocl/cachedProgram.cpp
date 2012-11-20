@@ -23,7 +23,7 @@ cl_program CreateProgram(cl_context context, cl_device_id device,
 
   if(fp == NULL){
 
-    fprintf(stderr, "cachedProgram.c::CreateProgram Failed to open %s for reading\n",clFilename);
+    fprintf(stderr, "cachedProgram.c::CreateProgram failed to open %s for reading\n",clFilename);
     return NULL;
 
   }
@@ -77,7 +77,7 @@ cl_program CreateProgramFromBinary(cl_context context, cl_device_id device,
   FILE * fp = fopen(binaryName, "rb");
 
   if(fp == NULL){
-    fprintf(stderr, "cachedProgram.c::CreateProgramFromBinary failed to open %s for reading\n", binaryName);
+    fprintf(stderr, "cachedProgram.c::CreateProgramFromBinary did not find an existing compilation %s, will compile anew\n", binaryName);
     return NULL;
   }
 

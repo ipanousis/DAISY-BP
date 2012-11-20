@@ -503,7 +503,7 @@ __kernel void transposeDaisy(__global   float * srcArray,
 #define TRANSD_FAST_WG_Y 1
 #define TRANSD_FAST_WG_X 128
 #define TRANSD_FAST_PETAL_PAIRS 8
-#define TRANSD_FAST_PETAL_PADDING 1
+#define TRANSD_FAST_PETAL_PADDING 0
 //## not robust to WG_Y change
 __kernel void transposeDaisyPairs(__global  float * srcArray,
                                   __global  float * dstArray,

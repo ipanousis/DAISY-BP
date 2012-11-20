@@ -31,4 +31,4 @@ typedef struct ocl_constructs_tag{
 
 ocl_constructs * newOclConstructs(cl_uint, cl_uint, cl_bool);
 
-int buildCachedConstructs(ocl_constructs*, cl_bool*);
+int buildCachedConstructs(ocl_constructs*, cl_bool*, int);

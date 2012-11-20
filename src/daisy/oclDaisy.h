@@ -20,7 +20,6 @@
 #define min(a,b) (a > b ? b : a)
 #define max(a,b) (a > b ? a : b)
 
-#define DAISY_PROFILING
 //#define DAISY_HOST_TRANSFER
 //#define CPU_VERIFICATION
 
@@ -60,7 +59,7 @@ typedef struct daisy_params_tag{
   float * descriptors;
   int width;
   int height;
-  int petalsNo;
+  int regionPetalsNo;
   int totalPetalsNo;
   int gradientsNo;
   int smoothingsNo;
@@ -68,10 +67,10 @@ typedef struct daisy_params_tag{
   int paddedHeight;
   int descriptorLength;
   ocl_daisy_programs oclPrograms;
+  short int cpuTransfer;
 } daisy_params;
 #endif
 
-#ifdef DAISY_PROFILING
 typedef struct time_params_tag{
 
   // Time structures - measure down to microseconds
@@ -102,11 +101,10 @@ typedef struct time_params_tag{
   short int displayRuntimes;
 
 } time_params;
-#endif
 
-daisy_params * newDaisyParams(unsigned char*, int, int, int, int, int);
+daisy_params * newDaisyParams(unsigned char*, int, int, short int);
 
-int initOcl(ocl_daisy_programs*, ocl_constructs *);
+int initOcl(daisy_params *, ocl_constructs *);
 
 int oclDaisy(daisy_params *, ocl_constructs *, time_params *);
 

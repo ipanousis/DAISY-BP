@@ -43,10 +43,12 @@ int main( int argc, char **argv  )
       return 1;
     }
 
-    ocl_constructs * daisyCl = newOclConstructs(0,0,0);
-    ocl_daisy_programs * daisyPrograms = (ocl_daisy_programs*)malloc(sizeof(ocl_daisy_programs));
+    saveBinary = (argc > counter && !strcmp("--save",argv[counter]));
 
-    daisy_params * daisy = newDaisyParams(srcArray, height, width, GRADIENTS_NO, REGION_PETALS_NO, SMOOTHINGS_NO);
+    printf("HxW=%dx%d\n",height,width);
+
+    daisy_params * daisy = newDaisyParams(srcArray, height, width, saveBinary);
+    ocl_constructs * daisyCl = newOclConstructs(0,0,0);
 
     time_params times;
     times.measureDeviceHostTransfers = 1;
@@ -54,9 +56,7 @@ int main( int argc, char **argv  )
     times.transRam = 0;
     times.displayRuntimes = 1;
 
-    initOcl(daisyPrograms,daisyCl);
-
-    daisy->oclPrograms = *daisyPrograms;
+    initOcl(daisy,daisyCl);
 
     oclDaisy(daisy, daisyCl, &times);
 
@@ -75,16 +75,17 @@ int main( int argc, char **argv  )
     free(daisy->array);
   }
   else if(argc > counter && !strcmp("-profile", argv[counter])){
-    
+
     // do the profiling across a range of inputs from 128x128 to 1536x1536
 
     // initialise all the opencl stuff first outside loop
     daisy_params * daisy;
-    ocl_daisy_programs * daisyPrograms = (ocl_daisy_programs*)malloc(sizeof(ocl_daisy_programs));
 
     ocl_constructs * daisyCl = newOclConstructs(0,0,0);
 
-    initOcl(daisyPrograms,daisyCl);
+    initOcl(daisy,daisyCl);
+
+    ocl_daisy_programs * daisyPrograms = &daisy->oclPrograms;
 
     // initialise loop variables, input range numbers etc..
     struct tm * sysTime = NULL;                     
@@ -157,7 +158,7 @@ whole,wholestd,dataTransfer,iterations,success\n");
 
       times.measureDeviceHostTransfers = 0;
 
-      daisy = newDaisyParams(array, height, width, GRADIENTS_NO, REGION_PETALS_NO, SMOOTHINGS_NO);
+      daisy = newDaisyParams(array, height, width, 0);
       daisy->oclPrograms = *daisyPrograms;
 
       for(int i = 0; i < iterations; i++){
