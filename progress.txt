@@ -1,7 +1,10 @@
 Progress:
 18/11/12 - The x1.7 speed-up is in place and working. In brief, without transfer
            back to RAM, dense DAISY can be done in 25 frames/sec for 1024x768 and
-           55 frames/sec for 640x480 images.
+           55 frames/sec for 640x480 images. Update: the sacrifice of using 26-petal
+           length descriptors for the sake of memory alignment is not necessary for
+           > 3.0 compute capability nVIDIA cards. But may be crucial for the case of
+           different cards and so is still available as a compiler argument.
 
 15/05/12 - Gained a speed-up of x1.7 on the whole.
               
