@@ -353,9 +353,10 @@ __kernel void convolve_G2y(__global   float * massArray,
 #define GRADIENTS_NO 8
 #define TOTAL_PETALS_NO 25
 #define REGION_PETALS_NO 8
+#define DESCRIPTOR_LENGTH (TOTAL_PETALS_NO * GRADIENTS_NO)
+
 #define TRANS_GROUP_SIZE_X 32
 #define TRANS_GROUP_SIZE_Y 8
-
 __kernel void transposeGradients(__global float * srcArray,
                                  __global float * dstArray,
                                  const    int     srcWidth,
@@ -593,19 +594,93 @@ __kernel void transposeDaisySingles(__global float * srcArray,
    const int gsx = get_global_size(0);
 
    // no steps
-   dstArray[(((gy % blockHeight) * (gsx / GRADIENTS_NO) + gx / GRADIENTS_NO) * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + 
-              TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO + gx % GRADIENTS_NO] = srcArray[gy * gsx + gx];
+   dstArray[(((gy % blockHeight) * (gsx / GRADIENTS_NO) + gx / GRADIENTS_NO) * 
+              (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + 
+              TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO + 
+              gx % GRADIENTS_NO] = srcArray[gy * gsx + gx];
 
 }
 
 
+/*
 
+  DAISY Descriptor In Memory
+  --------------------------
 
+  A) With TRANSD_FAST_PETAL_PADDING = 0
 
+  DescriptorLength: TOTAL_PETALS_NO * GRADIENTS_NO (so far is 200)
+  Data Type: 32-bit float
+  Descriptor block of memory: contiguous
+  Byte alignment of descriptor start: modulo DescriptorLength * sizeof(float)
 
+  the 'visual' is [DAISY_1_float1,DAISY_1_float2...DAISY_1_float200,
+                   DAISY_2_float1,DAISY_2_float2...DAISY_2_float200,
+                   ...,...,
+                   DAISY_N_float1,DAISY_N_float2...DAISY_N_float200]
 
+  where DAISY floats 1,2,...200 outer dimension is Petals and inner (fast-moving) 
+  is gradients (TOTAL_PETALS_NO * GRADIENTS_NO). N = imageWidth * imageHeight
 
+  B) With TRANSD_FAST_PETAL_PADDING > 0 (probably equal to 1)
 
+  Inter-descriptor memory: non-contiguous, a gap of 
+                           PADDING = TRANSD_FAST_PETAL_PADDING * GRADIENTS_NO
+                           which is worth PADDING * sizeof(float) bytes
+
+  Byte alignment of descriptor start: modulo (DescriptorLength + PADDING) * sizeof(float)
+
+  But the actual descriptor data starts at byte; start + PADDING
+
+  The padding is prepended.
+
+  the 'visual' is [PAD_1_float1,PAD_1_float2...,PAD_1_float8,
+                   ...,...,
+                   PAD_M_float1,PAD_M_float2...,PAD_M_float8,
+                   DAISY_1_float1,DAISY_1_float2...DAISY_1_float200,
+                   PAD_1_float1,PAD_1_float2...,PAD_1_float8,
+                   ...,...,
+                   PAD_M_float1,PAD_M_float2...,PAD_M_float8,
+                   DAISY_2_float1,DAISY_2_float2...DAISY_2_float200,
+                   ...,...,
+                   PAD_1_float1,PAD_1_float2...,PAD_1_float8,
+                   ...,...,
+                   PAD_M_float1,PAD_M_float2...,PAD_M_float8,
+                   DAISY_N_float1,DAISY_N_float2...DAISY_N_float200]
+
+  where M = TRANSD_FAST_PETAL_PADDING = usually 0 or 1
+
+  Padding may be needed in order to ensure coalescence of writes 
+  during kernel transposeDaisyPairs. Values to test are 0,1,2,3 depending
+  on global memory width.
+
+*/
+
+#define WG_FETCHDAISY_X 256 // try 32,64,128,256? probably the same..?
+__kernel void fetchDaisy(__global float * array){
+
+  __local lclDescriptors[DESCRIPTOR_LENGTH];
+
+  const int daisyNo = get_global_id(0) / WG_FETCHDAISY_X;
+
+  int steps = DESCRIPTOR_LENGTH / WG_FETCHDAISY_X;
+  steps = (steps * WG_FETCHDAISY_X < DESCRIPTOR_LENGTH ? steps + 1 : steps);
+
+  const int lx = get_local_id(0);
+
+  for(int i = 0; i < steps; i++){
+
+    if(i * WG_FETCHDAISY_X + lx >= DESCRIPTOR_LENGTH) break;
+
+    lclDescriptors[i * WG_FETCHDAISY_X + lx] = 
+
+          array[(daisyNo * (DESCRIPTOR_LENGTH + TRANSD_FAST_PETAL_PADDING) + 
+                TRANSD_FAST_PETAL_PADDING * GRADIENTS_NO) + 
+                i * WG_FETCHDAISY_X + lx];
+
+  }
+
+}
 
 
 

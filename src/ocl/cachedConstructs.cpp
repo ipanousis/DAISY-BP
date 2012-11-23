@@ -64,8 +64,9 @@ int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects,
     if(occs->contextProperties != NULL)
       occs->contextProperties[5] = (cl_context_properties)(occs->platformId);
 
-    occs->context = clCreateContext(occs->contextProperties, 1, 
-                                    &(occs->deviceId), NULL, NULL, &error);
+//    occs->context = clCreateContext(occs->contextProperties, 1, 
+//                                    &(occs->deviceId), NULL, NULL, &error);
+    occs->context = clCreateContext(0, 1, &(occs->deviceId), NULL, NULL, &error);
 
     occs->ioqueue = clCreateCommandQueue(occs->context, occs->deviceId, 0, &error);
 

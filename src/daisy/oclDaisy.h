@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <CL/cl.h>
+#include <sys/time.h>
 
 #include "ocl/cachedProgram.h"
 #include "ocl/cachedConstructs.h"
@@ -20,7 +21,7 @@
 #define min(a,b) (a > b ? b : a)
 #define max(a,b) (a > b ? a : b)
 
-//#define DAISY_HOST_TRANSFER
+//#define TEST_FETCHDAISY
 //#define CPU_VERIFICATION
 
 #ifndef OCL_DAISY_PROGRAMS
@@ -39,6 +40,7 @@ typedef struct ocl_daisy_programs_tag{
   cl_kernel kernel_transd;
   cl_kernel kernel_transdp;
   cl_kernel kernel_transds;
+  cl_kernel kernel_fetchd;
 } ocl_daisy_programs;
 #endif
 
@@ -90,7 +92,10 @@ typedef struct time_params_tag{
   struct timeval startTransDaisy, endTransDaisy; // measure transposition to daisy descriptors, with or without transfers
 
   struct timeval startTransPinned, endTransPinned; // time to compute a block + transfer it to pinned memory
+
   struct timeval startTransRam, endTransRam; // time to transfer a block from pinned memory to ram
+
+  struct timeval startFetchDaisy, endFetchDaisy; // time to fetch a daisy descriptor from global to local memory on the gpu
 
   double transPinned, transRam;
 

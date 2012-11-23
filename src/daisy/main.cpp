@@ -11,7 +11,6 @@
 #include "main.h"
 #include <stdio.h>
 #include <sys/time.h>
-#include <time.h>
 
 using namespace kutility;
 
@@ -51,7 +50,7 @@ int main( int argc, char **argv  )
     ocl_constructs * daisyCl = newOclConstructs(0,0,0);
 
     time_params times;
-    times.measureDeviceHostTransfers = 1;
+    times.measureDeviceHostTransfers = daisy->cpuTransfer;
     times.transPinned = 0;
     times.transRam = 0;
     times.displayRuntimes = 1;
@@ -133,7 +132,7 @@ whole,wholestd,dataTransfer,iterations,success\n");
     char* templateRow = "%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d\n";
 
     // initialise daisy and opencl
-    daisy_params * daisy = newDaisyParams(array, height, width, 0);
+    daisy_params * daisy = newDaisyParams(array, height, width, saveBinary);
     ocl_constructs * daisyCl = newOclConstructs(0,0,0);
     ocl_daisy_programs * daisyPrograms = &daisy->oclPrograms;
 
@@ -163,9 +162,9 @@ whole,wholestd,dataTransfer,iterations,success\n");
       double t_transRam = 0;
       double t_whole = 0;
 
-      times.measureDeviceHostTransfers = 0;
+      times.measureDeviceHostTransfers = daisy->cpuTransfer;
 
-      daisy = newDaisyParams(array,height,width,0);
+      daisy = newDaisyParams(array,height,width,daisy->cpuTransfer);
       daisy->oclPrograms = *daisyPrograms;
 
       for(int i = 0; i < iterations; i++){
@@ -228,9 +227,10 @@ whole,wholestd,dataTransfer,iterations,success\n");
   return 0;
 }
 
+// returns milliseconds
 double timeDiff(struct timeval start, struct timeval end){
 
-  return (end.tv_sec+(end.tv_usec/1000000.0)) - (start.tv_sec+(start.tv_usec/1000000.0));
+  return (end.tv_sec*1000.0+(end.tv_usec/1000.0)) - (start.tv_sec*1000.0+(start.tv_usec/1000.0));
 
 }
 
@@ -250,11 +250,10 @@ double getStd(double * observations, int length){
 
 void displayTimes(daisy_params * daisy, time_params * times){
 
-  printf("grad: %.4f sec\n",timeDiff(times->startGrad,times->endGrad));
-  printf("conv: %.4f sec\n",timeDiff(times->startConv,times->endConv));
-  printf("convx: %.4f sec\n",timeDiff(times->startConvX,times->endConvX));
-  printf("transPinned: %.4f sec\n",times->transPinned);
-  printf("transRam: %.4f sec\n",times->transRam);
-  printf("daisyFull: %.4f sec\n",timeDiff(times->startFull,times->endFull));
+  printf("convgrad: %.1f ms\n",timeDiff(times->startConvGrad,times->endConvGrad));
+  printf("transANorm: %.1f ms\n",timeDiff(times->startTransGrad,times->endTransGrad));
+  printf("transPinned: %.1f ms\n",times->transPinned);
+  printf("transRam: %.1f ms\n",times->transRam);
+  printf("daisyFull: %.1f ms\n",timeDiff(times->startFull,times->endFull));
 
 }
