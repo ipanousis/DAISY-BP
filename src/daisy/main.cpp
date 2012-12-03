@@ -17,6 +17,7 @@ using namespace kutility;
 double getStd(double* observations, int length);
 double timeDiff(struct timeval start, struct timeval end);
 void displayTimes(daisy_params * daisy,time_params * times);
+void writeInfofile(daisy_params * daisy, char * binaryfile);
 
 int main( int argc, char **argv  )
 {
@@ -69,6 +70,7 @@ int main( int argc, char **argv  )
       printf("Saving binary as %s...\n",filename);
       unpadDescriptorArray(daisy);
       kutility::save_binary(binaryfile, daisy->descriptors, daisy->height * daisy->width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
+      writeInfofile(daisy,filename);
     }
 
     free(daisy->array);
@@ -255,5 +257,23 @@ void displayTimes(daisy_params * daisy, time_params * times){
   printf("transPinned: %.1f ms\n",times->transPinned);
   printf("transRam: %.1f ms\n",times->transRam);
   printf("daisyFull: %.1f ms\n",timeDiff(times->startFull,times->endFull));
+
+}
+
+void writeInfofile(daisy_params * daisy, char * binaryfile){
+
+  char * infofile = (char*)malloc(sizeof(char) * 300);
+  sprintf(infofile,strcat(binaryfile,".bdaisy.info"));
+    
+  FILE * ff = fopen(infofile,"w");
+  fprintf(ff,"Width = %d\n",daisy->width);
+  fprintf(ff,"Height = %d\n",daisy->height);
+  fprintf(ff,"Descriptor Length = %d\n",daisy->descriptorLength);
+  fprintf(ff,"Datatype = %s\n","float");
+  fprintf(ff,"Datastart = %d\n",4);
+  fprintf(ff,"Recommended descriptor clip width on all borders = %d\n",15);
+
+  fclose(ff);
+  free(infofile);
 
 }

@@ -1,3 +1,57 @@
+/*
+
+  DAISY Descriptor In Memory
+  --------------------------
+
+  A) With TRANSD_FAST_PETAL_PADDING = 0
+
+  DescriptorLength: TOTAL_PETALS_NO * GRADIENTS_NO (so far is 200)
+  Data Type: 32-bit float
+  Descriptor block of memory: contiguous
+  Byte alignment of descriptor start: modulo DescriptorLength * sizeof(float)
+
+  the 'visual' is [DAISY_1_float1,DAISY_1_float2...DAISY_1_float200,
+                   DAISY_2_float1,DAISY_2_float2...DAISY_2_float200,
+                   ...,...,
+                   DAISY_N_float1,DAISY_N_float2...DAISY_N_float200]
+
+  where DAISY floats 1,2,...200 outer dimension is Petals and inner (fast-moving) 
+  is gradients (TOTAL_PETALS_NO * GRADIENTS_NO). N = imageWidth * imageHeight
+
+  B) With TRANSD_FAST_PETAL_PADDING > 0 (probably equal to 1)
+
+  Inter-descriptor memory: non-contiguous, a gap of 
+                           PADDING = TRANSD_FAST_PETAL_PADDING * GRADIENTS_NO
+                           which is worth PADDING * sizeof(float) bytes
+
+  Byte alignment of descriptor start: modulo (DescriptorLength + PADDING) * sizeof(float)
+
+  But the actual descriptor data starts at byte; start + PADDING
+
+  The padding is prepended.
+
+  the 'visual' is [PAD_1_float1,PAD_1_float2...,PAD_1_float8,
+                   ...,...,
+                   PAD_M_float1,PAD_M_float2...,PAD_M_float8,
+                   DAISY_1_float1,DAISY_1_float2...DAISY_1_float200,
+                   PAD_1_float1,PAD_1_float2...,PAD_1_float8,
+                   ...,...,
+                   PAD_M_float1,PAD_M_float2...,PAD_M_float8,
+                   DAISY_2_float1,DAISY_2_float2...DAISY_2_float200,
+                   ...,...,
+                   PAD_1_float1,PAD_1_float2...,PAD_1_float8,
+                   ...,...,
+                   PAD_M_float1,PAD_M_float2...,PAD_M_float8,
+                   DAISY_N_float1,DAISY_N_float2...DAISY_N_float200]
+
+  where M = TRANSD_FAST_PETAL_PADDING = usually 0 or 1
+
+  Padding may be needed in order to ensure coalescence of writes 
+  during kernel transposeDaisyPairs. Values to test are 0,1,2,3 depending
+  on global memory width.
+
+*/
+
 #define CONVX_GROUP_SIZE_X 16
 #define CONVX_GROUP_SIZE_Y 8
 #define CONVX_WORKER_STEPS 4
@@ -510,11 +564,12 @@ __kernel void transposeDaisyPairs(__global  float * srcArray,
                                   __global  float * dstArray,
                                   const     int     srcWidth,
                                   const     int     srcHeight,
-                                  const     int     blockHeight,
+                                  const     int     sectionHeight,
                                   const     int     petalTwoY,
                                   const     int     petalTwoX,      // offset in pixels
                                   const     int     petalOutOffset) // offset in petals = pixels * totalPetals + petalNo
 {
+  // Y range = blockNo * blockHeight - 15 : (blockNo+1) * blockHeight + 15
 
   const int lx = get_local_id(0);
 
@@ -533,9 +588,11 @@ __kernel void transposeDaisyPairs(__global  float * srcArray,
     }
     else{
 
-      int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO)) / GRADIENTS_NO + petalTwoX;
+      int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + 
+                    (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO)) / GRADIENTS_NO + petalTwoX;
 
-      const int offset = ((get_global_id(1) + petalTwoY) * srcWidth) * GRADIENTS_NO + lx % GRADIENTS_NO;
+      const int offset = ((get_global_id(1) + petalTwoY) * srcWidth) * GRADIENTS_NO + 
+                          lx % GRADIENTS_NO;
 
       for(int k = 0; k < TRANSD_FAST_STEPS; k++, sourceX += TRANSD_FAST_PETAL_PAIRS){
 
@@ -549,33 +606,46 @@ __kernel void transposeDaisyPairs(__global  float * srcArray,
   }
   else{
 
-    int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO)) / GRADIENTS_NO;
+    int sourceX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + 
+                  (lx % (TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO)) / GRADIENTS_NO;
 
     for(int k = 0; k < TRANSD_FAST_STEPS; k++, sourceX += TRANSD_FAST_PETAL_PAIRS)
-      lclArray[k * TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO + lx] = srcArray[(get_global_id(1) * srcWidth + sourceX) * GRADIENTS_NO + lx % GRADIENTS_NO];
+
+      lclArray[k * TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO + lx] = 
+
+          srcArray[(get_global_id(1) * srcWidth + sourceX) * GRADIENTS_NO + lx % GRADIENTS_NO];
   }
 
   barrier(CLK_LOCAL_MEM_FENCE);
 
-  const int targetY = sourceY % ((TRANSD_BLOCK_WIDTH * TRANSD_BLOCK_WIDTH) / srcWidth) + (petalOutOffset / TOTAL_PETALS_NO) / srcWidth;
+//  const int targetY = sourceY % ((TRANSD_BLOCK_WIDTH * TRANSD_BLOCK_WIDTH) / srcWidth) + 
+//                      (petalOutOffset / TOTAL_PETALS_NO) / srcWidth;
+  const int blockHeight = ((TRANSD_BLOCK_WIDTH * TRANSD_BLOCK_WIDTH) / srcWidth);
 
-  if(targetY < 0 || targetY >= blockHeight) return;
+  const int targetY = (sourceY % blockHeight + blockHeight +
+                      (petalOutOffset / TOTAL_PETALS_NO) / srcWidth) % blockHeight;
 
-  int targetX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + (petalOutOffset / TOTAL_PETALS_NO) % srcWidth + lx / (GRADIENTS_NO * 2);
+  if(targetY < 0 || targetY >= sectionHeight) return;
 
-  int targetPetalOffset = ((targetY * srcWidth + targetX) * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + abs(petalOutOffset % TOTAL_PETALS_NO) + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO;
+  int targetX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + 
+                (petalOutOffset / TOTAL_PETALS_NO) % srcWidth + lx / (GRADIENTS_NO * 2);
 
-  int localOffset = (TRANSD_FAST_PETAL_PAIRS * TRANSD_FAST_STEPS * ((lx / GRADIENTS_NO) % 2) + (lx / GRADIENTS_NO)/2) * GRADIENTS_NO + lx % GRADIENTS_NO;
+  int targetPetalOffset = ((targetY * srcWidth + targetX) * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + 
+                          abs(petalOutOffset % TOTAL_PETALS_NO) + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO;
 
-  for(int k = 0; k < TRANSD_FAST_STEPS; k++,
-                                        targetX += TRANSD_FAST_PETAL_PAIRS, 
-                                        targetPetalOffset += TRANSD_FAST_PETAL_PAIRS * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO,
-                                        localOffset += TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO){
+  int localOffset = (TRANSD_FAST_PETAL_PAIRS * TRANSD_FAST_STEPS * ((lx / GRADIENTS_NO) % 2) + 
+                    (lx / GRADIENTS_NO)/2) * GRADIENTS_NO + lx % GRADIENTS_NO;
+
+  for(int k = 0; k < TRANSD_FAST_STEPS; 
+
+          k++,
+          targetX += TRANSD_FAST_PETAL_PAIRS, 
+          targetPetalOffset += TRANSD_FAST_PETAL_PAIRS * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO,
+          localOffset += TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO){
 
     // kill target petals outside
     if(targetX < 0 || targetX >= srcWidth) continue;
 
-    // get target petal offset
     dstArray[targetPetalOffset + lx % (GRADIENTS_NO * 2)] = lclArray[localOffset];
 
   }
@@ -601,62 +671,7 @@ __kernel void transposeDaisySingles(__global float * srcArray,
 
 }
 
-
-/*
-
-  DAISY Descriptor In Memory
-  --------------------------
-
-  A) With TRANSD_FAST_PETAL_PADDING = 0
-
-  DescriptorLength: TOTAL_PETALS_NO * GRADIENTS_NO (so far is 200)
-  Data Type: 32-bit float
-  Descriptor block of memory: contiguous
-  Byte alignment of descriptor start: modulo DescriptorLength * sizeof(float)
-
-  the 'visual' is [DAISY_1_float1,DAISY_1_float2...DAISY_1_float200,
-                   DAISY_2_float1,DAISY_2_float2...DAISY_2_float200,
-                   ...,...,
-                   DAISY_N_float1,DAISY_N_float2...DAISY_N_float200]
-
-  where DAISY floats 1,2,...200 outer dimension is Petals and inner (fast-moving) 
-  is gradients (TOTAL_PETALS_NO * GRADIENTS_NO). N = imageWidth * imageHeight
-
-  B) With TRANSD_FAST_PETAL_PADDING > 0 (probably equal to 1)
-
-  Inter-descriptor memory: non-contiguous, a gap of 
-                           PADDING = TRANSD_FAST_PETAL_PADDING * GRADIENTS_NO
-                           which is worth PADDING * sizeof(float) bytes
-
-  Byte alignment of descriptor start: modulo (DescriptorLength + PADDING) * sizeof(float)
-
-  But the actual descriptor data starts at byte; start + PADDING
-
-  The padding is prepended.
-
-  the 'visual' is [PAD_1_float1,PAD_1_float2...,PAD_1_float8,
-                   ...,...,
-                   PAD_M_float1,PAD_M_float2...,PAD_M_float8,
-                   DAISY_1_float1,DAISY_1_float2...DAISY_1_float200,
-                   PAD_1_float1,PAD_1_float2...,PAD_1_float8,
-                   ...,...,
-                   PAD_M_float1,PAD_M_float2...,PAD_M_float8,
-                   DAISY_2_float1,DAISY_2_float2...DAISY_2_float200,
-                   ...,...,
-                   PAD_1_float1,PAD_1_float2...,PAD_1_float8,
-                   ...,...,
-                   PAD_M_float1,PAD_M_float2...,PAD_M_float8,
-                   DAISY_N_float1,DAISY_N_float2...DAISY_N_float200]
-
-  where M = TRANSD_FAST_PETAL_PADDING = usually 0 or 1
-
-  Padding may be needed in order to ensure coalescence of writes 
-  during kernel transposeDaisyPairs. Values to test are 0,1,2,3 depending
-  on global memory width.
-
-*/
-
-#define WG_FETCHDAISY_X 256 // try 32,64,128,256? probably the same..?
+#define WG_FETCHDAISY_X 256
 __kernel void fetchDaisy(__global float * array){
 
   __local lclDescriptors[DESCRIPTOR_LENGTH];
@@ -668,6 +683,7 @@ __kernel void fetchDaisy(__global float * array){
 
   const int lx = get_local_id(0);
 
+  // load
   for(int i = 0; i < steps; i++){
 
     if(i * WG_FETCHDAISY_X + lx >= DESCRIPTOR_LENGTH) break;
@@ -678,13 +694,24 @@ __kernel void fetchDaisy(__global float * array){
                 TRANSD_FAST_PETAL_PADDING * GRADIENTS_NO) + 
                 i * WG_FETCHDAISY_X + lx];
 
+    
+
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  // store
+  for(int i = 0; i < steps; i++){
+
+    if(i * WG_FETCHDAISY_X + lx >= DESCRIPTOR_LENGTH) break;
+
+    array[(daisyNo * (DESCRIPTOR_LENGTH + TRANSD_FAST_PETAL_PADDING) + 
+                    TRANSD_FAST_PETAL_PADDING * GRADIENTS_NO) + 
+                    i * WG_FETCHDAISY_X + lx] =
+              
+               lclDescriptors[i * WG_FETCHDAISY_X + lx];
+
   }
 
 }
-
-
-
-
-
-
 

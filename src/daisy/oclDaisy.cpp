@@ -12,13 +12,17 @@
 #include <omp.h>
 
 double timeDiffK(struct timeval start, struct timeval end);
-
+void testFetchDaisy(daisy_params * daisy, ocl_constructs * daisyCl, cl_mem daisyBufferA, time_params * times);
 float * generatePetalOffsets(float, int, short int);
 int * generateTranspositionOffsets(int, int, float*, int, int*, int*);
 long int verifyConvolutionY(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
 long int verifyConvolutionX(float * inputData, float * outputData, int height, int width, float * filter, int filterSize, int downsample);
 long int verifyTransposeGradientsPartialNorm(float * inputData, float * outputData, int width, int height, int gradientsNo);
 long int verifyTransposeDaisyPairs(daisy_params * daisy, float * transArray, float * daisyArray, int startRow, int endRow, float ** allPetalOffsets);
+
+#ifndef FETCH_RANGE_START
+#define FETCH_RANGE_START 512
+#endif
 
 // Maximum width that this TR_BLOCK_SIZE is effective on (assuming at least 
 // TR_DATA_WIDTH rows should be allocated per block) is currently 16384
@@ -61,6 +65,7 @@ void unpadDescriptorArray(daisy_params * daisy){
 
   float * array = daisy->descriptors;
   int paddingAdded = daisy->paddedWidth - daisy->width;
+  printf("PaddingAdded: %d\n",paddingAdded);
 
   if(paddingAdded == 0) return;
 
@@ -208,12 +213,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
   int daisyBlockWidth = daisy->paddedWidth;
   int daisyBlockHeight = min(TR_BLOCK_SIZE, daisy->paddedWidth * daisy->paddedHeight) / daisyBlockWidth;
-
-  if(daisyBlockHeight % TR_DATA_WIDTH > 0){
-
-    daisyBlockHeight = max(TR_DATA_WIDTH, (daisyBlockHeight / TR_DATA_WIDTH) * TR_DATA_WIDTH);
-
-  }
+  //printf("DaisyBlockHeight = %d\n",daisyBlockHeight);
 
   int totalSections = daisy->paddedHeight / daisyBlockHeight;
 
@@ -594,6 +594,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
     int sectionWidth = daisyBlockWidth;
     int sectionHeight = (sectionNo < totalSections-1 ? daisyBlockHeight : 
                         (daisy->paddedHeight % daisyBlockHeight ? daisy->paddedHeight % daisyBlockHeight : daisyBlockHeight));
+    int sectionSize = sectionWidth * sectionHeight * daisy->descriptorLength * sizeof(float);
 
     // undefined behaviour when sectionHeight is not a multiple of 16!!
     int TRANSD_FAST_STEPS = 4;
@@ -644,7 +645,12 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
       int petalOutOffset = (-petalOneY * daisy->paddedWidth - petalOneX) * daisy->totalPetalsNo;
       petalOutOffset += (petalOutOffset < 0 ? -petalNo : petalNo);
 
-      size_t daisyWorkerOffsets[2] = {sectionX * daisyBlockWidth, petalRegion * daisy->paddedHeight + sectionY * daisyBlockHeight};
+      size_t daisyWorkerOffsets[2] = {sectionX * daisyBlockWidth, 
+                                      petalRegion * daisy->paddedHeight + 
+                                      max(0, sectionY * daisyBlockHeight + // this will cover the block borders
+                                                               petalOneY)};
+      
+      //printf("SectionNo=%d :: PetalRegion=%d :: PetalOneY=%d :: PetalOutOffset=%d :: WorkerOffsetY=%d :: daisyBlockHeight=%d\n",sectionNo,petalRegion,petalOneY,petalOutOffset,daisyWorkerOffsets[1],daisyBlockHeight);
 
       clSetKernelArg(daisy->oclPrograms.kernel_transdp, 0, sizeof(cl_mem), (void*)&transBuffer);
       clSetKernelArg(daisy->oclPrograms.kernel_transdp, 1, sizeof(cl_mem), (void*)&daisyBuffer);
@@ -671,7 +677,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
 
     clSetKernelArg(daisy->oclPrograms.kernel_transds, 0, sizeof(cl_mem), (void*)&transBuffer);
     clSetKernelArg(daisy->oclPrograms.kernel_transds, 1, sizeof(cl_mem), (void*)&daisyBuffer);
-    clSetKernelArg(daisy->oclPrograms.kernel_transds, 2, sizeof(int), (void*)&sectionHeight);
+    clSetKernelArg(daisy->oclPrograms.kernel_transds, 2, sizeof(int), (void*)&daisyBlockHeight);
 
     error = clEnqueueNDRangeKernel(daisyCl->ooqueue, daisy->oclPrograms.kernel_transds, 2,
                                    daisyWorkerOffsetsSingles, daisyWorkerSizeSingles, daisyGroupSizeSingles,
@@ -696,6 +702,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
         gettimeofday(&times->startTransRam,NULL);
 
         #pragma omp parallel for private(byte)
+
         for(byte = 0; byte < daisyBlockHeight * daisyBlockWidth * daisy->descriptorLength; 
                       byte += daisyBlockWidth * daisy->descriptorLength){
 
@@ -710,7 +717,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
       }
 
       error = clEnqueueReadBuffer(daisyCl->ioqueue, daisyBuffer, CL_FALSE,
-                                  0, daisySectionSize, daisyDescriptorsSection,
+                                  0, sectionSize, daisyDescriptorsSection,
                                   kernelsPerSection, currKernelEvents, currMemoryEvents);
 
       if(oclError("oclDaisy","clEnqueueReadBuffer (daisyBuffer)",error)) return oclCleanUp(&daisy->oclPrograms,daisyCl,error);
@@ -761,7 +768,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
                              daisyBlockWidth * daisy->descriptorLength;
 
     error = clEnqueueReadBuffer(daisyCl->ioqueue, daisyBuffer, CL_TRUE,
-                                0, daisySectionSize, daisyArray + descriptorsOffset,
+                                0, sectionSize, daisyArray + descriptorsOffset,
                                 0, NULL, NULL);
 
     error = clEnqueueReadBuffer(daisyCl->ioqueue, transBuffer, CL_TRUE,
@@ -811,7 +818,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   if(daisy->cpuTransfer){
 
     // don't unmap the pinned memory if there was only one block
-    //if(totalSections > 1){
+    if(totalSections > 1){
 
       // Uncomment when calling oclDaisy multiple times
       error = clEnqueueUnmapMemObject(daisyCl->ioqueue, hostPinnedDaisyDescriptors, daisyDescriptorsSection, 0, NULL, NULL);
@@ -821,7 +828,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
       // Uncomment when calling oclDaisy multiple times
       error = clReleaseMemObject(hostPinnedDaisyDescriptors);
       if(oclError("oclDaisy","clReleaseMemObject (pinned daisy)",error)) return oclCleanUp(&daisy->oclPrograms,daisyCl,error);
-    //}
+    }
 
     //free(daisyDescriptorsSection);
   }
@@ -1060,12 +1067,12 @@ void testFetchDaisy(daisy_params * daisy, ocl_constructs * daisyCl, cl_mem daisy
   //
   cl_int error;
 
-  int rangeStart = 64;
-  int rangeEnd = 512;
-  int step = 64;
+  int rangeStart = FETCH_RANGE_START;
+  int rangeEnd = FETCH_RANGE_START;
+  int step = 512;
 
   int rangeLength = ((rangeEnd - rangeStart) / step + 2);
-  int iterations = 3;
+  int iterations = 1;
 
   double * fetchTimes = (double*)malloc(sizeof(double) * iterations);
 
@@ -1085,7 +1092,7 @@ void testFetchDaisy(daisy_params * daisy, ocl_constructs * daisyCl, cl_mem daisy
 
     clFinish(daisyCl->ooqueue);
     gettimeofday(&times->endFetchDaisy,NULL);
-    fetchTimes[0] += 1000*timeDiffK(times->startFetchDaisy,times->endFetchDaisy);
+    fetchTimes[0] += timeDiffK(times->startFetchDaisy,times->endFetchDaisy);
 
     // measure for rangeStart-rangeEnd
     for(int r = 1; r < rangeLength; r++){
@@ -1109,12 +1116,12 @@ void testFetchDaisy(daisy_params * daisy, ocl_constructs * daisyCl, cl_mem daisy
     printf("end\n");
   }
 
-  const char * csvOutName = "gdaisy-speeds-FETCHDAISY.csv";
+  const char * csvOutName = "gdaisy-speeds-FETCHWRITEDAISY.csv";
   FILE * csvOut = fopen(csvOutName,"w");
   fprintf(csvOut,"descriptors,msec\n");
   fprintf(csvOut,"1,%.6f\n",fetchTimes[0] / iterations);
   for(int r = 1; r < rangeLength; r++){
-    fprintf(csvOut,"%d,%.6f\n",rangeStart+(r-1)*step,(1000*fetchTimes[r])/iterations);
+    fprintf(csvOut,"%d,%.6f\n",rangeStart+(r-1)*step,(fetchTimes[r])/iterations);
   }
   fclose(csvOut);
   printf("Fetch daisy results written to %s.\n",csvOutName);
