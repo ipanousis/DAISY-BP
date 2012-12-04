@@ -117,3 +117,4 @@ void unpadDescriptorArray(daisy_params *);
 
 int oclCleanUp(ocl_daisy_programs *, ocl_constructs *, int);
 
+int daisyCleanUp(daisy_params *, ocl_constructs *);

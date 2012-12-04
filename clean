@@ -1,3 +1,3 @@
 #!/bin/sh
 make clean
-rm -rf config.* aclocal.m4 configure autom* missing install-sh depcomp Makefile Makefile.in stamp-h1 compile README
+rm -rf config.* aclocal.m4 configure autom* missing install-sh depcomp Makefile Makefile.in stamp-h1 compile README daisyKernels.cl.bin

@@ -37,9 +37,8 @@ int main( int argc, char **argv  )
     counter++;
     
     if(height * width > 2048 * 2048){
-      fprintf(stderr, "Apologies but this implementation is not yet ready to\
-                       accept larger image sizes than 2048*2048.\n\
-                       If you must process them, try to split your images in blocks or otherwise feel free to implement DAISY computation in parts :)");
+      fprintf(stderr, "This implementation cannot yet handle larger image sizes than 2048*2048.\n\
+                       Try to split your images in blocks or otherwise feel free to implement DAISY computation in parts :)");
       return 1;
     }
 

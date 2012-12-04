@@ -86,7 +86,7 @@ void unpadDescriptorArray(daisy_params * daisy){
 int daisyCleanUp(daisy_params * daisy, ocl_constructs * daisyCl){
 
   // do clean up
-   oclCleanUp(daisy->oclPrograms,daisy,daisyCl);
+   oclCleanUp(&daisy->oclPrograms,daisyCl,0);
 
   return 0;
 }
