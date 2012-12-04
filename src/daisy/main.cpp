@@ -74,7 +74,7 @@ int main( int argc, char **argv  )
       writeInfofile(daisy,filename);
     }
 
-    //free(daisy->array);
+    daisyCleanUp(daisy,daisyCl);
   }
   else if(argc > counter && !strcmp("-profile", argv[counter])){
 

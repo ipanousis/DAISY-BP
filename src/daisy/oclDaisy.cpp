@@ -83,6 +83,14 @@ void unpadDescriptorArray(daisy_params * daisy){
 
 }
 
+int daisyCleanUp(daisy_params * daisy, ocl_constructs * daisyCl){
+
+  // do clean up
+   oclCleanUp(daisy->oclPrograms,daisy,daisyCl);
+
+  return 0;
+}
+
 int oclError(const char * function, const char * functionCall, int error){
 
   if(error){
