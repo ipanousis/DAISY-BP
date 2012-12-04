@@ -67,13 +67,14 @@ int main( int argc, char **argv  )
       string binaryfile = filename;
       binaryfile += ".bdaisy";
 
-      printf("Saving binary as %s...\n",filename);
+      printf("Unpadding descriptor array...\n");
       unpadDescriptorArray(daisy);
+      printf("Saving binary as %s...\n",filename);
       kutility::save_binary(binaryfile, daisy->descriptors, daisy->height * daisy->width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
       writeInfofile(daisy,filename);
     }
 
-    free(daisy->array);
+    //free(daisy->array);
   }
   else if(argc > counter && !strcmp("-profile", argv[counter])){
 
