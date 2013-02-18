@@ -18,13 +18,14 @@ double getStd(double* observations, int length);
 double timeDiff(struct timeval start, struct timeval end);
 void displayTimes(daisy_params * daisy,time_params * times);
 void writeInfofile(daisy_params * daisy, char * binaryfile);
+void profileSpeed(short int cpuTransfer);
+void runDaisy(char * filename, short int saveBinary);
+void runMatcher();
 
 int main( int argc, char **argv  )
 {
 
   char* filename = NULL;
-  uchar* srcArray = NULL;
-  int width, height;
 
   short int saveBinary = 0;
   int counter = 1;
@@ -33,54 +34,97 @@ int main( int argc, char **argv  )
   if(argc > counter+1 && (!strcmp("-i", argv[counter]))){
 
     filename = argv[++counter];
-    load_gray_image (filename, srcArray, height, width);
+
     counter++;
-    
-    if(height * width > 2048 * 2048){
-      fprintf(stderr, "This implementation cannot yet handle larger image sizes than 2048*2048.\n\
-                       Try to split your images in blocks or otherwise feel free to implement DAISY computation in parts :)");
-      return 1;
-    }
 
     saveBinary = (argc > counter && !strcmp("-save",argv[counter]));
 
-    printf("HxW=%dx%d\n",height,width);
 
-    daisy_params * daisy = newDaisyParams(srcArray, height, width, saveBinary);
-    ocl_constructs * daisyCl = newOclConstructs(0,0,0);
+    runDaisy(filename,saveBinary);
 
-    time_params times;
-    times.measureDeviceHostTransfers = daisy->cpuTransfer;
-    times.transPinned = 0;
-    times.transRam = 0;
-    times.displayRuntimes = 1;
-
-    initOcl(daisy,daisyCl);
-
-    oclDaisy(daisy, daisyCl, &times);
-
-    if(times.displayRuntimes)
-      displayTimes(daisy,&times);
-
-    if(saveBinary){
-      string binaryfile = filename;
-      binaryfile += ".bdaisy";
-
-      printf("Unpadding descriptor array...\n");
-      unpadDescriptorArray(daisy);
-      printf("Saving binary as %s...\n",filename);
-      kutility::save_binary(binaryfile, daisy->descriptors, daisy->height * daisy->width, daisy->descriptorLength, 1, kutility::TYPE_FLOAT);
-      writeInfofile(daisy,filename);
-    }
-
-    daisyCleanUp(daisy,daisyCl);
   }
   else if(argc > counter && !strcmp("-profile", argv[counter])){
 
     // do the profiling across a range of inputs from 128x128 to 1536x1536
 
     counter++;
+
     saveBinary = (argc > counter && !strcmp("-save",argv[counter]));
+
+    profileSpeed(saveBinary);
+
+  }
+  else if(argc > counter && !strcmp("-match", argv[counter])){
+
+    /* do matching */
+    counter++;
+
+    runMatcher();
+
+  }
+  else{
+    fprintf(stderr,"Pass image filename with argument -i <file>, or profile with -profile\n");
+    return 1;
+  }
+
+  return 0;
+}
+
+void runMatcher(){
+
+  time_params * times = (time_params*) malloc(sizeof(time_params));
+  times->measureDeviceHostTransfers = 0;
+  times->transPinned = 0;
+  times->transRam = 0;
+  times->displayRuntimes = 1;
+
+  ocl_constructs * daisyCl = newOclConstructs(0,0,0);
+
+  daisy_params * daisyTemplate = initDaisy("test-data/template.jpg",0);
+  daisy_params * daisyTarget = initDaisy("test-data/frames/frame-0570s.png",0);
+
+  initOcl(daisyTemplate, daisyCl);
+  initOclMatch(daisyTemplate,daisyCl);
+
+  daisyTarget->oclKernels = daisyTemplate->oclKernels;
+
+  oclDaisy(daisyTemplate, daisyCl, times);
+  oclDaisy(daisyTarget, daisyCl, times);
+
+  oclMatchDaisy(daisyTemplate, daisyTarget, daisyCl, times);
+
+  daisyCleanUp(daisyTemplate,daisyCl);
+  daisyCleanUp(daisyTarget,daisyCl);
+
+}
+
+void runDaisy(char * filename, short int saveBinary){
+
+  time_params times;
+  times.measureDeviceHostTransfers = saveBinary;
+  times.transPinned = 0;
+  times.transRam = 0;
+  times.displayRuntimes = 1;
+
+  ocl_constructs * daisyCl = newOclConstructs(0,0,0);
+
+  daisy_params * daisy = initDaisy(filename,saveBinary);
+
+  initOcl(daisy,daisyCl);
+
+  oclDaisy(daisy, daisyCl, &times);
+
+  if(times.displayRuntimes)
+    displayTimes(daisy,&times);
+
+  if(saveBinary)
+    saveToBinary(daisy);
+
+  daisyCleanUp(daisy,daisyCl);
+  
+}
+
+void profileSpeed(short int cpuTransfer){
 
     // initialise loop variables, input range numbers etc..
     struct tm * sysTime = NULL;                     
@@ -91,7 +135,7 @@ int main( int argc, char **argv  )
 
     char * csvOutName = (char*)malloc(sizeof(char) * 200);
     char * nameTemplate = (char*)malloc(sizeof(char) * 100);
-    if(saveBinary)
+    if(cpuTransfer)
       strcpy(nameTemplate,"gdaisy-speeds-FAST-STANDARD-TRANSFER-%02d%02d-%02d%02d.csv");
     else
       strcpy(nameTemplate,"gdaisy-speeds-FAST-STANDARD-NOTRANSFER-%02d%02d-%02d%02d.csv");
@@ -131,12 +175,15 @@ int main( int argc, char **argv  )
 transA,transB,transBhost,transBtopinned,transBtoram,\
 whole,wholestd,dataTransfer,iterations,success\n");
 
-    char* templateRow = "%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d\n";
+    const char * templateRow = "%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d\n";
+
+    int height = 0;
+    int width = 0;
 
     // initialise daisy and opencl
-    daisy_params * daisy = newDaisyParams(array, height, width, saveBinary);
+    daisy_params * daisy = newDaisyParams("", array, height, width, cpuTransfer);
     ocl_constructs * daisyCl = newOclConstructs(0,0,0);
-    ocl_daisy_programs * daisyPrograms = &daisy->oclPrograms;
+    ocl_daisy_kernels * daisyKernels = daisy->oclKernels;
 
     initOcl(daisy,daisyCl);
 
@@ -166,8 +213,8 @@ whole,wholestd,dataTransfer,iterations,success\n");
 
       times.measureDeviceHostTransfers = daisy->cpuTransfer;
 
-      daisy = newDaisyParams(array,height,width,daisy->cpuTransfer);
-      daisy->oclPrograms = *daisyPrograms;
+      daisy = newDaisyParams("", array,height,width,daisy->cpuTransfer);
+      daisy->oclKernels = daisyKernels;
 
       for(int i = 0; i < iterations; i++){
 
@@ -175,6 +222,7 @@ whole,wholestd,dataTransfer,iterations,success\n");
         times.transRam = 0;
       
         success |= oclDaisy(daisy, daisyCl, &times);
+        daisyCleanUp(daisy, daisyCl);
 
         t_grad += timeDiff(times.startGrad, times.endGrad);
         t_conv += timeDiff(times.startConv, times.endConv);
@@ -220,19 +268,6 @@ whole,wholestd,dataTransfer,iterations,success\n");
     fclose(csvOut);
     printf("Speed test results written to %s.\n", csvOutName);
     free(array);
-  }
-  else{
-    fprintf(stderr,"Pass image filename with argument -i <file>, or profile with -profile\n");
-    return 1;
-  }
-
-  return 0;
-}
-
-// returns milliseconds
-double timeDiff(struct timeval start, struct timeval end){
-
-  return (end.tv_sec*1000.0+(end.tv_usec/1000.0)) - (start.tv_sec*1000.0+(start.tv_usec/1000.0));
 
 }
 
@@ -247,33 +282,5 @@ double getStd(double * observations, int length){
     stdSum += pow(observations[i] - mean,2);
 
   return sqrt(stdSum / length);
-
-}
-
-void displayTimes(daisy_params * daisy, time_params * times){
-
-  printf("convgrad: %.1f ms\n",timeDiff(times->startConvGrad,times->endConvGrad));
-  printf("transANorm: %.1f ms\n",timeDiff(times->startTransGrad,times->endTransGrad));
-  printf("transPinned: %.1f ms\n",times->transPinned);
-  printf("transRam: %.1f ms\n",times->transRam);
-  printf("daisyFull: %.1f ms\n",timeDiff(times->startFull,times->endFull));
-
-}
-
-void writeInfofile(daisy_params * daisy, char * binaryfile){
-
-  char * infofile = (char*)malloc(sizeof(char) * 300);
-  sprintf(infofile,strcat(binaryfile,".bdaisy.info"));
-    
-  FILE * ff = fopen(infofile,"w");
-  fprintf(ff,"Width = %d\n",daisy->width);
-  fprintf(ff,"Height = %d\n",daisy->height);
-  fprintf(ff,"Descriptor Length = %d\n",daisy->descriptorLength);
-  fprintf(ff,"Datatype = %s\n","float");
-  fprintf(ff,"Datastart = %d\n",4);
-  fprintf(ff,"Recommended descriptor clip width on all borders = %d\n",15);
-
-  fclose(ff);
-  free(infofile);
 
 }

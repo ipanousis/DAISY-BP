@@ -223,9 +223,6 @@ cl_int buildCachedProgram(ocl_constructs * occs, const char * filebase, const ch
 
   cl_int error = 0;
 
-  if(occs->program != NULL)
-    return error;
-
   char binaryName[256];
   binaryName[0] = '\0';
   strcat(binaryName, filebase);
@@ -248,6 +245,8 @@ cl_int buildCachedProgram(ocl_constructs * occs, const char * filebase, const ch
       //CLeanup
       return 2;
     }
+
+    occs->programs[occs->programsCount++] = occs->program;
 
   }
 

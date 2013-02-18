@@ -57,9 +57,9 @@
 #define CONVX_WORKER_STEPS 4
 
 __kernel void convolve_denx(__global   float * massArray,
-                          __constant float  * fltArray,
-                          const      int     pddWidth,
-                          const      int     pddHeight)
+                            __constant float * fltArray,
+                            const      int     pddWidth,
+                            const      int     pddHeight)
 {
 
   const int lx = get_local_id(0);
@@ -714,4 +714,105 @@ __kernel void fetchDaisy(__global float * array){
   }
 
 }
+
+
+/*
+
+  Match layer 3 of a small set of DAISY descriptors (the template)
+  to a subsampled set of DAISY descriptors (the target frame)
+
+  Compare for one rotation - use either a different parameterisation or a
+  different kernel for each rotation
+
+*/
+
+#define REGION_PETALS_NO 8
+#define GRADIENTS_NO 8
+#define TOTAL_PETALS_NO 25
+#define DESCRIPTOR_LENGTH ((TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO)
+
+#define ROTATIONS_NO 8
+
+#define TMP_PETALS_NO 2
+#define TRG_PIXELS_NO 2
+#define WGX_MATCH_COARSE 64
+#define SUBSAMPLE 4
+
+#define DIFFS ((TRG_PIXELS_NO * TMP_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO) / WGX_MATCH_COARSE)
+
+__kernel void diffCoarse(__global   float * tmp,
+                         __global   float * trg,
+                         __global   float * out,
+                         const      int     width,
+                         const      int     petalNo)
+{
+
+  __local float lclTrg[TRG_PIXELS_NO][REGION_PETALS_NO * GRADIENTS_NO];
+
+  const int lid = get_local_id(0);
+  const int gx = get_global_id(0);
+  const int gy = get_global_id(1);
+
+  // fetch target pixels to local memory; GRADIENTS_NO x REGION_PETALS_NO x TRG_PIXELS_NO (128 = 2 steps)
+  int i;
+  for(i = 0; i < (TRG_PIXELS_NO * REGION_PETALS_NO * GRADIENTS_NO) / WGX_MATCH_COARSE; i++){
+
+    lclTrg[i][lid] = 
+
+      trg[(gy * SUBSAMPLE * width + (gx / WGX_MATCH_COARSE + i) * 
+           SUBSAMPLE) * DESCRIPTOR_LENGTH + 
+          (TOTAL_PETALS_NO-REGION_PETALS_NO) * GRADIENTS_NO + lid]; //trg[gy * 4096 + gx]; // 0.04 ms
+
+  }
+
+  // do 4 diffs and sum them
+  float diffs = 0.0;
+  
+  // first 32 threads do diffs for the first pixel, others for the second pixel
+  // first 4 threads do diffs for rotation 0, next 4 threads rotation 1....
+  const int pixelNo = lid / (WGX_MATCH_COARSE / TRG_PIXELS_NO);
+  const int rotationNo = (lid / (WGX_MATCH_COARSE / (TRG_PIXELS_NO * ROTATIONS_NO))) % ROTATIONS_NO; 
+
+  // get these by rotationNo and lid
+  const int trgPetal = (petalNo + rotationNo) % REGION_PETALS_NO;
+  const int trgFirstGradient = (lid % (GRADIENTS_NO / DIFFS)) * DIFFS + rotationNo;
+  for(i = 0; i < DIFFS; i++){
+
+    // pick pixel, pick rotation => pick petal, pick gradient
+    diffs += fabs(tmp[lid] - lclTrg[pixelNo][trgPetal * GRADIENTS_NO + 
+                                   (trgFirstGradient + i) % GRADIENTS_NO]);
+
+  }
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  //
+  // *** this bit is quite slow - 0.06ms for 512x512 input
+  //
+  // put them in local memory
+  lclTrg[0][lid] = diffs;
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  // the first 32 threads sum half of the 64 values
+  if(lid < WGX_MATCH_COARSE / TRG_PIXELS_NO)
+    lclTrg[0][lid * 2] = lclTrg[0][lid * 2] + 
+                         lclTrg[0][lid * 2 + 1];
+
+  barrier(CLK_LOCAL_MEM_FENCE);
+
+  // the first 16 threads sum the half of half
+  if(lid < (WGX_MATCH_COARSE / (TRG_PIXELS_NO * 2))){
+
+    diffs = lclTrg[0][lid * 4] + lclTrg[0][lid * 4 + 2];
+
+    // first 16 fetch and write to global
+    out[(gy * (width / SUBSAMPLE) + gx / (WGX_MATCH_COARSE / TRG_PIXELS_NO)) * ROTATIONS_NO + 
+        lid] += diffs;
+
+  }
+
+}
+
+// a kernel to normalise per rotation per template point
 

@@ -19,7 +19,10 @@ ocl_constructs * newOclConstructs(cl_uint workerSize, cl_uint groupSize, cl_bool
   occs->ioqueue = NULL;
   occs->program = NULL;
   occs->buffers = NULL;
-  occs->kernel = NULL;
+
+  occs->programsCount = 0;
+  occs->programs = (cl_program*)malloc(sizeof(cl_program) * 10);
+
   if(clGlSharing && 0){
     occs->contextProperties = (cl_context_properties*) 
                                 malloc(sizeof(cl_context_properties) * 7);
@@ -37,7 +40,7 @@ ocl_constructs * newOclConstructs(cl_uint workerSize, cl_uint groupSize, cl_bool
   return occs;
 }
 
-int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects, int kernelQueues){
+int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects){
 
   cl_int error = 0;
   *rebuildMemoryObjects = 0;
@@ -64,8 +67,6 @@ int buildCachedConstructs(ocl_constructs * occs, cl_bool * rebuildMemoryObjects,
     if(occs->contextProperties != NULL)
       occs->contextProperties[5] = (cl_context_properties)(occs->platformId);
 
-//    occs->context = clCreateContext(occs->contextProperties, 1, 
-//                                    &(occs->deviceId), NULL, NULL, &error);
     occs->context = clCreateContext(0, 1, &(occs->deviceId), NULL, NULL, &error);
 
     occs->ioqueue = clCreateCommandQueue(occs->context, occs->deviceId, 0, &error);

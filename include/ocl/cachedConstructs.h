@@ -18,17 +18,15 @@ typedef struct ocl_constructs_tag{
   cl_device_id deviceId;
   cl_context context;
   cl_program program;
+  cl_program * programs;
+  cl_uint programsCount;
   cl_command_queue ioqueue;
   cl_command_queue ooqueue;
   cl_mem * buffers;
-  cl_kernel kernel;
   cl_context_properties* contextProperties;
-  size_t workerSize;
-  size_t groupSize;
-  //cl_uint refreshCount;
 } ocl_constructs;
 #endif
 
 ocl_constructs * newOclConstructs(cl_uint, cl_uint, cl_bool);
 
-int buildCachedConstructs(ocl_constructs*, cl_bool*, int);
+int buildCachedConstructs(ocl_constructs*, cl_bool*);
