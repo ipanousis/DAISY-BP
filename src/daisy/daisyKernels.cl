@@ -733,7 +733,7 @@ __kernel void fetchDaisy(__global float * array){
 
 #define ROTATIONS_NO 8
 
-#define TMP_PETALS_NO 2
+#define TMP_PETALS_NO 4
 #define TRG_PIXELS_NO 2
 #define WGX_MATCH_COARSE 64
 #define SUBSAMPLE 4
@@ -761,7 +761,7 @@ __kernel void diffCoarse(__global   float * tmp,
 
       trg[(gy * SUBSAMPLE * width + (gx / WGX_MATCH_COARSE + i) * 
            SUBSAMPLE) * DESCRIPTOR_LENGTH + 
-          (TOTAL_PETALS_NO-REGION_PETALS_NO) * GRADIENTS_NO + lid]; //trg[gy * 4096 + gx]; // 0.04 ms
+          (TOTAL_PETALS_NO-REGION_PETALS_NO) * GRADIENTS_NO + lid];
 
   }
 
@@ -775,11 +775,11 @@ __kernel void diffCoarse(__global   float * tmp,
 
   // get these by rotationNo and lid
   const int trgPetal = (petalNo + rotationNo) % REGION_PETALS_NO;
-  const int trgFirstGradient = (lid % (GRADIENTS_NO / DIFFS)) * DIFFS + rotationNo;
+  const int trgFirstGradient = rotationNo;
   for(i = 0; i < DIFFS; i++){
 
     // pick pixel, pick rotation => pick petal, pick gradient
-    diffs += fabs(tmp[lid] - lclTrg[pixelNo][trgPetal * GRADIENTS_NO + 
+    diffs += fabs(tmp[lid / GRADIENTS_NO + i] - lclTrg[pixelNo][trgPetal * GRADIENTS_NO + 
                                    (trgFirstGradient + i) % GRADIENTS_NO]);
 
   }
@@ -787,7 +787,7 @@ __kernel void diffCoarse(__global   float * tmp,
   barrier(CLK_LOCAL_MEM_FENCE);
 
   //
-  // *** this bit is quite slow - 0.06ms for 512x512 input
+  // *** this bit is quite slow - 0.10ms for 512x512 input
   //
   // put them in local memory
   lclTrg[0][lid] = diffs;

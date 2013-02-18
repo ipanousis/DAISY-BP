@@ -57,7 +57,6 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget, ocl_
   int coarseWidth  = daisyTarget->paddedWidth  / pow(SUBSAMPLE_RATE,2);
   int coarseHeight = daisyTarget->paddedHeight / pow(SUBSAMPLE_RATE,2);
   int rotationsNo = ROTATIONS_NO;
-  int coarsePixelsPerRun = 2;
   int templatePetalsPerRun = 4;
 
   printf("Matching coarse layer [%dx%d] (subsampled by %d) for %d rotations\n",
