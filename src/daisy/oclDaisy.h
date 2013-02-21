@@ -59,6 +59,9 @@ typedef struct ocl_daisy_kernels_tag{
   cl_kernel transds;
   cl_kernel fetchd;
   cl_kernel diffCoarse;
+  cl_kernel transposeRotations;
+  cl_kernel reduceMin;
+  cl_kernel normaliseRotation;
 } ocl_daisy_kernels;
 #endif
 

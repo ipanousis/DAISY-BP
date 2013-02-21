@@ -81,7 +81,7 @@ void runMatcher(){
   ocl_constructs * daisyCl = newOclConstructs(0,0,0);
 
   daisy_params * daisyTemplate = initDaisy("test-data/template.jpg",0);
-  daisy_params * daisyTarget = initDaisy("test-data/frames/frame-0570s.png",0);
+  daisy_params * daisyTarget = initDaisy("test-data/bg-frames/frame-0570s.png",0);
 
   initOcl(daisyTemplate, daisyCl);
   initOclMatch(daisyTemplate,daisyCl);

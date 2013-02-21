@@ -56,15 +56,15 @@
 #define CONVX_GROUP_SIZE_Y 8
 #define CONVX_WORKER_STEPS 4
 
-__kernel void convolve_denx(__global   float * massArray,
-                            __constant float * fltArray,
+kernel void convolve_denx(global   float * massArray,
+                            constant float * fltArray,
                             const      int     pddWidth,
                             const      int     pddHeight)
 {
 
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
-  __local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
+  local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
 
   const int srcOffsetX = (get_group_id(0) * CONVX_WORKER_STEPS-1) * CONVX_GROUP_SIZE_X + lx;
   const int srcOffset = get_global_id(1) * pddWidth + srcOffsetX;
@@ -93,14 +93,14 @@ __kernel void convolve_denx(__global   float * massArray,
 #define CONVY_GROUP_SIZE_Y 8
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_deny(__global   float * massArray,
-                          __constant float * fltArray,
+kernel void convolve_deny(global   float * massArray,
+                          constant float * fltArray,
                           const      int     pddWidth,
                           const      int     pddHeight)
 {
   const int ly = get_local_id(1);
   const int lx = get_local_id(0);  
-  __local float lclArray[CONVY_GROUP_SIZE_X][CONVY_GROUP_SIZE_Y * (CONVY_WORKER_STEPS+2) + 1];
+  local float lclArray[CONVY_GROUP_SIZE_X][CONVY_GROUP_SIZE_Y * (CONVY_WORKER_STEPS+2) + 1];
 
   const int srcOffsetY = ((get_group_id(1) * CONVY_WORKER_STEPS-1) * CONVY_GROUP_SIZE_Y + ly);
   const int srcOffset =  srcOffsetY * pddWidth + get_global_id(0) + pddWidth * pddHeight;
@@ -125,7 +125,7 @@ __kernel void convolve_deny(__global   float * massArray,
   }
 }
 
-__kernel void gradients(__global float * massArray,
+kernel void gradients(global float * massArray,
                             const    int     pddWidth,
                             const    int     pddHeight)
 {
@@ -180,15 +180,15 @@ __kernel void gradients(__global float * massArray,
 #define CONVX_GROUP_SIZE_Y 4
 #define CONVX_WORKER_STEPS 4
 
-__kernel void convolve_G0x(__global   float * massArray,
-                           __constant float  * fltArray,
+kernel void convolve_G0x(global   float * massArray,
+                           constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
 
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
-  __local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
+  local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
 
   const int srcOffsetX = (get_group_id(0) * CONVX_WORKER_STEPS-1) * CONVX_GROUP_SIZE_X + lx;
   const int srcOffset = get_global_id(1) * pddWidth + srcOffsetX;
@@ -218,15 +218,15 @@ __kernel void convolve_G0x(__global   float * massArray,
 #define CONVY_GROUP_SIZE_Y 8
 #define CONVY_WORKER_STEPS 8
 
-__kernel void convolve_G0y(__global   float * massArray,
-                           __constant float  * fltArray,
+kernel void convolve_G0y(global   float * massArray,
+                           constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
 
   const int ly = get_local_id(1);
   const int lx = get_local_id(0);  
-  __local float lclArray[CONVY_GROUP_SIZE_X][CONVY_GROUP_SIZE_Y * (CONVY_WORKER_STEPS+2) + 1];
+  local float lclArray[CONVY_GROUP_SIZE_X][CONVY_GROUP_SIZE_Y * (CONVY_WORKER_STEPS+2) + 1];
 
   const int srcOffsetY = ((get_group_id(1) * CONVY_WORKER_STEPS-1) * CONVY_GROUP_SIZE_Y + ly);
   const int srcOffset =  srcOffsetY * pddWidth + get_global_id(0) + pddWidth * pddHeight * 8;
@@ -256,15 +256,15 @@ __kernel void convolve_G0y(__global   float * massArray,
 #define CONVX_GROUP_SIZE_X 16
 #define CONVX_WORKER_STEPS 4
 
-__kernel void convolve_G1x(__global   float * massArray,
-                           __constant float  * fltArray,
+kernel void convolve_G1x(global   float * massArray,
+                           constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
 
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
-  __local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
+  local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
 
   const int srcOffsetX = (get_group_id(0) * CONVX_WORKER_STEPS-1) * CONVX_GROUP_SIZE_X + lx;
   const int srcOffset = get_global_id(1) * pddWidth + srcOffsetX;
@@ -294,15 +294,15 @@ __kernel void convolve_G1x(__global   float * massArray,
 #define CONVY_GROUP_SIZE_Y 16
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_G1y(__global   float * massArray,
-                           __constant float  * fltArray,
+kernel void convolve_G1y(global   float * massArray,
+                           constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
 
   const int ly = get_local_id(1);
   const int lx = get_local_id(0);  
-  __local float lclArray[CONVY_GROUP_SIZE_X][CONVY_GROUP_SIZE_Y * (CONVY_WORKER_STEPS+2) + 1];
+  local float lclArray[CONVY_GROUP_SIZE_X][CONVY_GROUP_SIZE_Y * (CONVY_WORKER_STEPS+2) + 1];
 
   const int srcOffsetY = ((get_group_id(1) * CONVY_WORKER_STEPS-1) * CONVY_GROUP_SIZE_Y + ly);
   const int srcOffset =  srcOffsetY * pddWidth + get_global_id(0) + pddWidth * pddHeight * 8 * 2;
@@ -331,15 +331,15 @@ __kernel void convolve_G1y(__global   float * massArray,
 
 //#define CONVX_WORKER_STEPS 8
 
-__kernel void convolve_G2x(__global   float * massArray,
-                           __constant float  * fltArray,
+kernel void convolve_G2x(global   float * massArray,
+                           constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
 
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
-  __local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
+  local float lclArray[CONVX_GROUP_SIZE_Y][CONVX_GROUP_SIZE_X * (CONVX_WORKER_STEPS + 2)];
 
   const int srcOffsetX = (get_group_id(0) * CONVX_WORKER_STEPS-1) * CONVX_GROUP_SIZE_X + lx;
   const int srcOffset = get_global_id(1) * pddWidth + srcOffsetX + pddWidth * pddHeight * 8;
@@ -368,15 +368,15 @@ __kernel void convolve_G2x(__global   float * massArray,
 
 #define CONVY_WORKER_STEPS 4
 
-__kernel void convolve_G2y(__global   float * massArray,
-                           __constant float  * fltArray,
+kernel void convolve_G2y(global   float * massArray,
+                           constant float  * fltArray,
                            const      int     pddWidth,
                            const      int     pddHeight)
 {
 
   const int ly = get_local_id(1);
   const int lx = get_local_id(0);
-  __local float lclArray[CONVY_GROUP_SIZE_X][CONVY_GROUP_SIZE_Y * (CONVY_WORKER_STEPS+2) + 1];
+  local float lclArray[CONVY_GROUP_SIZE_X][CONVY_GROUP_SIZE_Y * (CONVY_WORKER_STEPS+2) + 1];
 
   const int srcOffsetY = ((get_group_id(1) * CONVY_WORKER_STEPS-1) * CONVY_GROUP_SIZE_Y + ly);
   const int srcOffset =  srcOffsetY * pddWidth + get_global_id(0) + pddWidth * pddHeight * 8 * 3;
@@ -411,10 +411,10 @@ __kernel void convolve_G2y(__global   float * massArray,
 
 #define TRANS_GROUP_SIZE_X 32
 #define TRANS_GROUP_SIZE_Y 8
-__kernel void transposeGradients(__global float * srcArray,
-                                 __global float * dstArray,
-                                 const    int     srcWidth,
-                                 const    int     srcHeight)
+kernel void transposeGradients(global float * srcArray,
+                               global float * dstArray,
+                               const  int     srcWidth,
+                               const  int     srcHeight)
 {
 
     const int smoothSectionHeight = srcHeight * GRADIENTS_NO;
@@ -426,7 +426,7 @@ __kernel void transposeGradients(__global float * srcArray,
 
     const int srcIndex = (smoothSection * smoothSectionHeight + groupRowGradientSection * srcHeight + groupRow) * srcWidth + get_global_id(0);
 
-    __local float lclArray[(TRANS_GROUP_SIZE_X+2) * TRANS_GROUP_SIZE_Y];
+    local float lclArray[(TRANS_GROUP_SIZE_X+2) * TRANS_GROUP_SIZE_Y];
 
     lclArray[get_local_id(1) * (TRANS_GROUP_SIZE_X+2) + get_local_id(0)] = srcArray[srcIndex];
 
@@ -459,10 +459,10 @@ __kernel void transposeGradients(__global float * srcArray,
 #define TRANSD_PAIRS_OFFSET_WIDTH 1000
 #define TRANSD_PAIRS_SINGLE_ONLY -999
 
-__kernel void transposeDaisy(__global   float * srcArray,
-                             __global   float * dstArray,
-                             __constant int   * transArray,
-                             __local    float * lclArray,
+kernel void transposeDaisy(global   float * srcArray,
+                             global   float * dstArray,
+                             constant int   * transArray,
+                             local    float * lclArray,
                              const      int     srcWidth,
                              const      int     srcHeight,
                              const      int     srcGlobalOffset,
@@ -484,7 +484,7 @@ __kernel void transposeDaisy(__global   float * srcArray,
   const int lx = get_local_id(0);
   const int ly = get_local_id(1);
 
-  //__local float lclArray[TRANSD_DATA_WIDTH * (TRANSD_DATA_WIDTH * GRADIENTS_NO)];
+  //local float lclArray[TRANSD_DATA_WIDTH * (TRANSD_DATA_WIDTH * GRADIENTS_NO)];
 
   // coalesced read (srcGlobalOffset + xid,yid) + padded write to lclArray
   //const int stepsPerWorker = (srcWidth * GRADIENTS_NO) / get_global_size(0); // => globalSizeX must divide 512 (16,32,64,128,256)
@@ -560,8 +560,8 @@ __kernel void transposeDaisy(__global   float * srcArray,
 #define TRANSD_FAST_PETAL_PAIRS 8
 #define TRANSD_FAST_PETAL_PADDING 0
 //## not robust to WG_Y change
-__kernel void transposeDaisyPairs(__global  float * srcArray,
-                                  __global  float * dstArray,
+kernel void transposeDaisyPairs(global  float * srcArray,
+                                  global  float * dstArray,
                                   const     int     srcWidth,
                                   const     int     srcHeight,
                                   const     int     sectionHeight,
@@ -575,7 +575,7 @@ __kernel void transposeDaisyPairs(__global  float * srcArray,
 
   const int sourceY = get_global_id(1) % srcHeight;
 
-  __local float lclArray[TRANSD_FAST_WG_Y * TRANSD_FAST_WG_X * TRANSD_FAST_STEPS];
+  local float lclArray[TRANSD_FAST_WG_Y * TRANSD_FAST_WG_X * TRANSD_FAST_STEPS];
 
   // fetch 
   if(lx >= TRANSD_FAST_PETAL_PAIRS * GRADIENTS_NO){
@@ -654,9 +654,11 @@ __kernel void transposeDaisyPairs(__global  float * srcArray,
 
 #define TRANSD_FAST_SINGLES_WG_Y 1
 #define TRANSD_FAST_SINGLES_WG_X 128
-__kernel void transposeDaisySingles(__global float * srcArray,
-                                    __global float * dstArray,
-                                    const    int     blockHeight){ // blockHeight should be the maximum, ie daisyBlockHeight from the .cpp
+kernel void transposeDaisySingles(global float * srcArray,
+                                  global float * dstArray,
+                                  const    int     blockHeight)
+{ 
+  // blockHeight should be the maximum, ie daisyBlockHeight from the .cpp
 
    // Moves from index range 0-srcWidth to 0-srcWidth*26, filling in petal no 1 out of 0-25
    const int gy = get_global_id(1);
@@ -672,9 +674,10 @@ __kernel void transposeDaisySingles(__global float * srcArray,
 }
 
 #define WG_FETCHDAISY_X 256
-__kernel void fetchDaisy(__global float * array){
+kernel void fetchDaisy(global float * array)
+{
 
-  __local lclDescriptors[DESCRIPTOR_LENGTH];
+  local lclDescriptors[DESCRIPTOR_LENGTH];
 
   const int daisyNo = get_global_id(0) / WG_FETCHDAISY_X;
 
@@ -733,21 +736,20 @@ __kernel void fetchDaisy(__global float * array){
 
 #define ROTATIONS_NO 8
 
-#define TMP_PETALS_NO 4
+#define TMP_PETALS_NO 8
 #define TRG_PIXELS_NO 2
 #define WGX_MATCH_COARSE 64
 #define SUBSAMPLE 4
 
 #define DIFFS ((TRG_PIXELS_NO * TMP_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO) / WGX_MATCH_COARSE)
 
-__kernel void diffCoarse(__global   float * tmp,
-                         __global   float * trg,
-                         __global   float * out,
-                         const      int     width,
-                         const      int     petalNo)
+kernel void diffCoarse( global   float * tmp,
+                        global   float * trg,
+                        global   float * out,
+                        const    int     width)
 {
 
-  __local float lclTrg[TRG_PIXELS_NO][REGION_PETALS_NO * GRADIENTS_NO];
+  local float lclTrg[TRG_PIXELS_NO][REGION_PETALS_NO * GRADIENTS_NO];
 
   const int lid = get_local_id(0);
   const int gx = get_global_id(0);
@@ -759,28 +761,34 @@ __kernel void diffCoarse(__global   float * tmp,
 
     lclTrg[i][lid] = 
 
-      trg[(gy * SUBSAMPLE * width + (gx / WGX_MATCH_COARSE + i) * 
+      trg[(gy * SUBSAMPLE * width + ((gx / WGX_MATCH_COARSE) * TRG_PIXELS_NO + i) * 
            SUBSAMPLE) * DESCRIPTOR_LENGTH + 
           (TOTAL_PETALS_NO-REGION_PETALS_NO) * GRADIENTS_NO + lid];
 
   }
 
+  barrier(CLK_LOCAL_MEM_FENCE);
+
   // do 4 diffs and sum them
   float diffs = 0.0;
   
-  // first 32 threads do diffs for the first pixel, others for the second pixel
-  // first 4 threads do diffs for rotation 0, next 4 threads rotation 1....
-  const int pixelNo = lid / (WGX_MATCH_COARSE / TRG_PIXELS_NO);
-  const int rotationNo = (lid / (WGX_MATCH_COARSE / (TRG_PIXELS_NO * ROTATIONS_NO))) % ROTATIONS_NO; 
-
-  // get these by rotationNo and lid
-  const int trgPetal = (petalNo + rotationNo) % REGION_PETALS_NO;
-  const int trgFirstGradient = rotationNo;
   for(i = 0; i < DIFFS; i++){
 
+    // first 32 threads do diffs for the first pixel, others for the second pixel
+    // first 4 threads do diffs for rotation 0, next 4 threads rotation 1....
+    const int pixelNo = lid / (WGX_MATCH_COARSE / TRG_PIXELS_NO);
+    const int rotationNo = (lid / (WGX_MATCH_COARSE / (TRG_PIXELS_NO * ROTATIONS_NO))) % ROTATIONS_NO; 
+
+    const int petalNo = (lid % 4) * 2; // first template petal
+
+    // get these by rotationNo and lid
+    const int trgPetal = (petalNo + rotationNo) % REGION_PETALS_NO;
+    const int trgFirstGradient = rotationNo;
+
     // pick pixel, pick rotation => pick petal, pick gradient
-    diffs += fabs(tmp[lid / GRADIENTS_NO + i] - lclTrg[pixelNo][trgPetal * GRADIENTS_NO + 
-                                   (trgFirstGradient + i) % GRADIENTS_NO]);
+    diffs += fabs(tmp[petalNo * GRADIENTS_NO + i] - 
+                  lclTrg[pixelNo][((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
+                                  (trgFirstGradient + i) % GRADIENTS_NO]);
 
   }
 
@@ -808,11 +816,109 @@ __kernel void diffCoarse(__global   float * tmp,
 
     // first 16 fetch and write to global
     out[(gy * (width / SUBSAMPLE) + gx / (WGX_MATCH_COARSE / TRG_PIXELS_NO)) * ROTATIONS_NO + 
-        lid] += diffs;
+        lid] = diffs;
 
   }
 
 }
 
-// a kernel to normalise per rotation per template point
+#define WGX_TRANSPOSE_ROTATIONS 128
+#define SEGMENT_SIZE (WGX_TRANSPOSE_ROTATIONS / ROTATIONS_NO)
+kernel void transposeRotations(global float * in,
+                               global float * out,
+                               const  int     height,
+                               const  int     width)
+{
+
+  local float lcl[WGX_TRANSPOSE_ROTATIONS];
+  const int lid = get_local_id(0);
+  const int gy = get_global_id(1);
+  const int gx = get_global_id(0);
+
+  lcl[lid] = in[gy * width * ROTATIONS_NO + gx];
+
+  // will have 32 threads per target rotation
+  const int rotation = lid / SEGMENT_SIZE;
+
+  out[rotation * height * width + gy * width + 
+      get_group_id(0) * SEGMENT_SIZE + gx % SEGMENT_SIZE] = 
+
+      lcl[rotation + (lid % SEGMENT_SIZE) * ROTATIONS_NO];
+
+}
+
+/*
+    This version is completely unrolled.  It uses a template parameter to achieve 
+    optimal code for any (power of 2) number of threads.  This requires a switch 
+    statement in the host code to handle all the different thread block sizes at 
+    compile time.
+*/
+
+#define WGX_REDUCEMIN 256
+
+kernel void reduceMin(global float * in,
+                      global float * out, 
+                      const  int     size,
+                      local  volatile float * lcl){
+
+    // perform first level of reduction,
+    // reading from global memory, writing to shared memory
+    const unsigned int lid = get_local_id(0);
+    const unsigned int i = get_group_id(0) * (get_local_size(0) * 2) + get_local_id(0);
+
+    lcl[lid] = ((i < size) ? in[i] : 0);
+    if(i + WGX_REDUCEMIN < size)
+       lcl[lid] = min(lcl[lid],in[i + WGX_REDUCEMIN]);
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    // do reduction in shared mem
+    if(WGX_REDUCEMIN >= 512) { if(lid < 256) { lcl[lid] = min(lcl[lid],lcl[lid + 256]); } barrier(CLK_LOCAL_MEM_FENCE); }
+    if(WGX_REDUCEMIN >= 256) { if(lid < 128) { lcl[lid] = min(lcl[lid],lcl[lid + 128]); } barrier(CLK_LOCAL_MEM_FENCE); }
+    if(WGX_REDUCEMIN >= 128) { if(lid <  64) { lcl[lid] = min(lcl[lid],lcl[lid +  64]); } barrier(CLK_LOCAL_MEM_FENCE); }
+    
+    if (lid < 32)
+    {
+        if(WGX_REDUCEMIN >=  64) { lcl[lid] = min(lcl[lid],lcl[lid + 32]); }
+        if(WGX_REDUCEMIN >=  32) { lcl[lid] = min(lcl[lid],lcl[lid + 16]); }
+        if(WGX_REDUCEMIN >=  16) { lcl[lid] = min(lcl[lid],lcl[lid +  8]); }
+        if(WGX_REDUCEMIN >=   8) { lcl[lid] = min(lcl[lid],lcl[lid +  4]); }
+        if(WGX_REDUCEMIN >=   4) { lcl[lid] = min(lcl[lid],lcl[lid +  2]); }
+        if(WGX_REDUCEMIN >=   2) { lcl[lid] = min(lcl[lid],lcl[lid +  1]); }
+    }
+    
+    const int wgid = get_group_id(0);
+    const int dstOffset = (get_global_offset(0) / size) * (size / WGX_REDUCEMIN);
+    out += dstOffset;
+
+    // write result for this block to global mem 
+    if(lid == 0) out[wgid] = lcl[0];
+
+
+    // now continue to find maximum between all the blocks
+    if(wgid == 0 && lid < 64){
+
+      lcl[lid] = out[wgid];
+
+      if(lid < 32) {
+        lcl[lid] = min(lcl[lid],lcl[lid + 32]);
+        lcl[lid] = min(lcl[lid],lcl[lid + 16]);
+        lcl[lid] = min(lcl[lid],lcl[lid +  8]);
+        lcl[lid] = min(lcl[lid],lcl[lid +  4]);
+        lcl[lid] = min(lcl[lid],lcl[lid +  2]);
+        lcl[lid] = min(lcl[lid],lcl[lid +  1]); 
+      }
+
+      if(lid == 0) out[(get_global_offset(0) / size)] = lcl[0];
+
+    }
+
+}
+
+kernel void normaliseRotation(global float * data,
+                              global float * maxima){
+
+  data[get_global_id(0)] /= maxima[get_global_offset(0) / get_global_size(0)];
+
+}
 

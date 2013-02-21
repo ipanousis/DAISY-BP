@@ -211,7 +211,7 @@ void displayTimes(daisy_params * daisy, time_params * times){
 char * writeInfofile(daisy_params * daisy, char * binaryfile){
 
   char * infofile = (char*)malloc(sizeof(char) * 300);
-  sprintf(infofile,strcat(binaryfile,".bdaisy.info"));
+  sprintf(infofile,strcat(binaryfile,".info"));
     
   FILE * ff = fopen(infofile,"w");
   fprintf(ff,"Width = %d\n",daisy->width);
