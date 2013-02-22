@@ -60,6 +60,8 @@ daisy_params * newDaisyParams(char * filename, unsigned char* array, int height,
   params->descriptorLength = DESCRIPTOR_LENGTH;
   params->cpuTransfer = cpuTransfer;
   params->oclKernels = (ocl_daisy_kernels*) malloc(sizeof(ocl_daisy_kernels));
+  params->oclKernels->kernelsNo = 19;
+  *(params->oclKernels) = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
   params->buffers = (cl_mem*) malloc(sizeof(cl_mem) * 10);
   params->buffersSize = 0;
 
@@ -92,7 +94,7 @@ int daisyCleanUp(daisy_params * daisy, ocl_constructs * daisyCl){
 
   // do clean up
 
-  for(int i = 0; i < daisy->buffersSize; i++)
+  for(int i = 0, buffersNo = daisy->buffersSize; i < buffersNo; i++, daisy->buffersSize--)
     clReleaseMemObject(daisy->buffers[i]);
 
   oclCleanUp(daisy->oclKernels,daisyCl,0);
@@ -114,7 +116,29 @@ int oclError(const char * function, const char * functionCall, int error){
 
 int oclCleanUp(ocl_daisy_kernels * daisy, ocl_constructs * daisyCl, int error){
 
-  // do clean up
+  // Release kernels
+  if(daisy->denx      != NULL) { clReleaseKernel(daisy->denx); daisy->denx = NULL; }
+  if(daisy->deny      != NULL) { clReleaseKernel(daisy->deny); daisy->deny = NULL; }
+  if(daisy->grad      != NULL) { clReleaseKernel(daisy->grad); daisy->grad = NULL; }
+  if(daisy->G0x       != NULL) { clReleaseKernel(daisy->G0x); daisy->G0x = NULL; }
+  if(daisy->G0y       != NULL) { clReleaseKernel(daisy->G0y); daisy->G0y = NULL; }
+  if(daisy->G1x       != NULL) { clReleaseKernel(daisy->G1x); daisy->G1x = NULL; }
+  if(daisy->G1y       != NULL) { clReleaseKernel(daisy->G1y); daisy->G1y = NULL; }
+  if(daisy->G2x       != NULL) { clReleaseKernel(daisy->G2x); daisy->G2x = NULL; }
+  if(daisy->G2y       != NULL) { clReleaseKernel(daisy->G2y); daisy->G2y = NULL; }
+  if(daisy->trans     != NULL) { clReleaseKernel(daisy->trans); daisy->trans = NULL; }
+  if(daisy->transd    != NULL) { clReleaseKernel(daisy->transd); daisy->transd = NULL; }
+  if(daisy->transdp   != NULL) { clReleaseKernel(daisy->transdp); daisy->transdp = NULL; }
+  if(daisy->transds   != NULL) { clReleaseKernel(daisy->transds); daisy->transds = NULL; }
+  if(daisy->fetchd    != NULL) { clReleaseKernel(daisy->fetchd); daisy->fetchd = NULL; }
+  if(daisy->diffCoarse != NULL) { clReleaseKernel(daisy->diffCoarse); daisy->diffCoarse = NULL; }
+  if(daisy->transposeRotations != NULL) { clReleaseKernel(daisy->transposeRotations); daisy->transposeRotations = NULL; }
+  if(daisy->reduceMin != NULL) { clReleaseKernel(daisy->reduceMin); daisy->reduceMin = NULL; }
+  if(daisy->reduceMinAll != NULL) { clReleaseKernel(daisy->reduceMin); daisy->reduceMinAll = NULL; }
+
+  // Release command queues
+  if(daisyCl->ioqueue != NULL) { clReleaseCommandQueue(daisyCl->ioqueue); daisyCl->ioqueue = NULL; }
+  if(daisyCl->ooqueue != NULL) { clReleaseCommandQueue(daisyCl->ooqueue); daisyCl->ooqueue = NULL; }
 
   return error;
 

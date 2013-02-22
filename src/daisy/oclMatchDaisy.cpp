@@ -2,6 +2,8 @@
 
 long int verifyDiffCoarse(daisy_params * daisyTarget, float * petalArray, 
                           float * targetArray, float * diffArray);
+long int verifyReduceMinAll(daisy_params * daisyTarget, float * diffTransArray, float * diffArray);
+long int verifyTransposeRotations(daisy_params * daisyTarget, float * diffArray, float * diffTransArray);
 
 int oclErrorM(const char * function, const char * functionCall, int error){
 
@@ -52,6 +54,9 @@ int initOclMatch(daisy_params * daisy, ocl_constructs * daisyCl){
   daisy->oclKernels->reduceMin = clCreateKernel(daisyCl->program, "reduceMin", &error);
   if(oclErrorM("initOclMatch","clCreateKernel (reduceMin)",error)) return oclCleanUp(daisy->oclKernels,daisyCl,error);
 
+  daisy->oclKernels->reduceMinAll = clCreateKernel(daisyCl->program, "reduceMinAll", &error);
+  if(oclErrorM("initOclMatch","clCreateKernel (reduceMinAll)",error)) return oclCleanUp(daisy->oclKernels,daisyCl,error);
+
   daisy->oclKernels->normaliseRotation = clCreateKernel(daisyCl->program, "normaliseRotation", &error);
   if(oclErrorM("initOclMatch","clCreateKernel (normaliseRotation)",error)) return oclCleanUp(daisy->oclKernels,daisyCl,error);
 
@@ -59,7 +64,8 @@ int initOclMatch(daisy_params * daisy, ocl_constructs * daisyCl){
 
 }
 
-int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget, ocl_constructs * daisyCl, time_params * times){
+int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget, 
+                  ocl_constructs * daisyCl, time_params * times){
 
   cl_int error = 0;
 
@@ -124,13 +130,21 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget, ocl_
   // Setup reduceMin kernel
   int diffBufferSize = coarseHeight * coarseWidth; // reduce per rotation
 
-  const size_t wgsreduceMin = 256;
-  const size_t wsreduceMin = diffBufferSize;
+  const size_t wgsReduceMin = 256;
+  const size_t wsReduceMin = diffBufferSize;
 
   clSetKernelArg(daisyTemplate->oclKernels->reduceMin, 0, sizeof(diffBufferTrans), (void*)&diffBufferTrans);
   clSetKernelArg(daisyTemplate->oclKernels->reduceMin, 1, sizeof(diffBuffer), (void*)&diffBuffer);
   clSetKernelArg(daisyTemplate->oclKernels->reduceMin, 2, sizeof(int), (void*)&diffBufferSize);
-  clSetKernelArg(daisyTemplate->oclKernels->reduceMin, 3, sizeof(float) * wgsreduceMin, (void*)NULL);
+  clSetKernelArg(daisyTemplate->oclKernels->reduceMin, 3, sizeof(float) * wgsReduceMin, (void*)NULL);
+
+  const size_t wgsReduceMinAll = (coarseHeight * coarseWidth) / wgsReduceMin;
+  const size_t wsReduceMinAll = wgsReduceMinAll * rotationsNo;
+
+  clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 0, sizeof(diffBufferTrans), (void*)&diffBufferTrans);
+  clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 1, sizeof(diffBuffer), (void*)&diffBuffer);
+  clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 2, sizeof(int), (void*)&wgsReduceMinAll);
+  clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 3, sizeof(float) * wgsReduceMinAll, (void*)NULL);
 
 /*  const size_t wgsNormaliseRotation = 256;
   const size_t wsNormaliseRotation = wsreduceMin;
@@ -155,6 +169,9 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget, ocl_
 
   if(oclErrorM("oclDaisy","clEnqueueNDRangeKernel (diffCoarse)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
+  error = clFinish(daisyCl->ioqueue);
+
+  if(oclErrorM("oclMatchDaisy","clFinish",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 /*  
     *** can work async from the kernel run when looping over multiple template points ***
 
@@ -172,11 +189,11 @@ error = clEnqueueCopyBuffer(daisyCl->ioqueue, templateBuffer, petalBufferB,
 
   for(int rotation = 0; rotation < 8; rotation++){
 
-    const size_t wsoreduceMin = rotation * wsreduceMin;
+    const size_t wsoReduceMin = rotation * wsReduceMin;
 
     // Find maximum for HxW of each rotation
     error = clEnqueueNDRangeKernel(daisyCl->ioqueue, daisyTemplate->oclKernels->reduceMin, 1, 
-                                   &wsoreduceMin, &wsreduceMin, &wgsreduceMin,
+                                   &wsoReduceMin, &wsReduceMin, &wgsReduceMin,
                                    0, NULL, NULL);
 
     // Normalise per rotation
@@ -187,9 +204,11 @@ error = clEnqueueCopyBuffer(daisyCl->ioqueue, templateBuffer, petalBufferB,
 
   }
 
-  error = clFinish(daisyCl->ioqueue);
+  // Find minima for each rotation
+  error = clEnqueueNDRangeKernel(daisyCl->ioqueue, daisyTemplate->oclKernels->reduceMinAll, 1, 
+                                 NULL, &wsReduceMinAll, &wgsReduceMinAll,
+                                 0, NULL, NULL);
 
-  if(oclErrorM("oclMatchDaisy","clFinish",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
   gettimeofday(&times->endConv,NULL);
   
@@ -203,6 +222,7 @@ error = clEnqueueCopyBuffer(daisyCl->ioqueue, templateBuffer, petalBufferB,
 //
 
   float * diffArray = (float*)malloc(sizeof(float) * coarseWidth * coarseHeight * rotationsNo);
+  float * diffTransArray = (float*)malloc(sizeof(float) * coarseWidth * coarseHeight * rotationsNo);
   float * petalArray = (float*)malloc(sizeof(float) * REGION_PETALS_NO * GRADIENTS_NO);
   float * targetArray = (float*)malloc(sizeof(float) * (daisyTarget->paddedWidth * daisyTarget->paddedHeight * DESCRIPTOR_LENGTH));
 
@@ -211,6 +231,12 @@ error = clEnqueueCopyBuffer(daisyCl->ioqueue, templateBuffer, petalBufferB,
                               diffArray, 0, NULL, NULL);
 
   if(oclErrorM("oclMatchDaisy","clEnqueueReadBuffer (diffBuffer)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
+
+  error = clEnqueueReadBuffer(daisyCl->ioqueue, diffBufferTrans, CL_TRUE,
+                              0, coarseWidth * coarseHeight * rotationsNo * sizeof(float), 
+                              diffTransArray, 0, NULL, NULL);
+
+  if(oclErrorM("oclMatchDaisy","clEnqueueReadBuffer (diffBufferTrans)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
   error = clEnqueueReadBuffer(daisyCl->ioqueue, targetBuffer, CL_TRUE,
                               0, (daisyTarget->paddedWidth * daisyTarget->paddedHeight * DESCRIPTOR_LENGTH) * sizeof(float), 
@@ -225,7 +251,13 @@ error = clEnqueueCopyBuffer(daisyCl->ioqueue, templateBuffer, petalBufferB,
   if(oclErrorM("oclMatchDaisy","clEnqueueReadBuffer (petalBuffer)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
   long int issues = verifyDiffCoarse(daisyTarget, petalArray, targetArray, diffArray);
-  printf("diffCoarse verification: %ld issues\n",issues);
+  printf("diffCoarse verification: %ld issues (ignore if =512 and running reduceMin)\n",issues);
+
+  issues = verifyTransposeRotations(daisyTarget, diffArray, diffTransArray);
+  printf("transposeRotations verification: %ld issues (ignore if =512 and running reduceMin)\n",issues);
+
+  issues = verifyReduceMinAll(daisyTarget, diffTransArray, diffArray);
+  printf("reduceMin verification: %ld issues\n",issues);
 
   free(diffArray);
   free(petalArray);
@@ -281,9 +313,9 @@ long int verifyDiffCoarse(daisy_params * daisyTarget, float * petalArray,
         float gpudiff = diffArray[((targetY / subsample) * coarseWidth + targetX / subsample) * rotationsNo + rotation];
         if(fabs(gpudiff - diff) > 0.0001){
           issues++;
-          if(targetY == 8 && shown++ < 100){
-            printf("X,Y,R = %d,%d,%d | CPU = %.3f and GPU = %.3f\n",targetX / subsample,targetY/subsample,rotation,diff,gpudiff);
-          }
+          //if(shown++ < 100){
+          //  printf("X,Y,R = %d,%d,%d | CPU = %.3f and GPU = %.3f\n",targetX / subsample,targetY/subsample,rotation,diff,gpudiff);
+          //}
         }
         else if(0 && shown++ < 200)
           printf("X,Y,R = %d,%d,%d | CPU = %.3f and GPU = %.3f\n",targetX / subsample,targetY/subsample,rotation,diff,gpudiff);
@@ -298,3 +330,68 @@ long int verifyDiffCoarse(daisy_params * daisyTarget, float * petalArray,
 
 }
 
+long int verifyTransposeRotations(daisy_params * daisyTarget, float * diffArray, float * diffTransArray){
+
+  long int issues = 0;
+
+  int rotationsNo = ROTATIONS_NO;
+  int subsample = 4;
+  int coarseHeight = daisyTarget->paddedHeight / subsample;
+  int coarseWidth = daisyTarget->paddedWidth / subsample;
+
+  for(int rotation = 0; rotation < rotationsNo; rotation++){
+
+    for(int targetY = 0; targetY < coarseHeight; targetY++){
+
+      for(int targetX = 0; targetX < coarseWidth; targetX++){
+
+          float cpuTrans = diffArray[(targetY * coarseWidth + targetX) * rotationsNo + rotation];
+          float gpuTrans = diffTransArray[rotation * coarseHeight * coarseWidth + targetY * coarseWidth + targetX];
+
+          if(fabs(cpuTrans - gpuTrans) > 0.001){
+            issues++;
+            //if(issues < 100)
+            //  printf("R,Y,X = %d,%d,%d | CPU TRANS = %f | GPU TRANS = %f\n", rotation,targetY,targetX,cpuTrans,gpuTrans);
+          }
+
+      }
+
+    }
+
+  }
+
+  return issues;
+
+}
+
+long int verifyReduceMinAll(daisy_params * daisyTarget, float * diffArray, float * minArray){
+
+  long int issues = 0;
+  int rotationsNo = ROTATIONS_NO;
+  int subsample = 4;
+  int diffArrayLengthPerRotation = (daisyTarget->paddedWidth / subsample) * (daisyTarget->paddedHeight / subsample);
+
+  for(int rotation = 0; rotation < rotationsNo; rotation++){
+
+    float min = 999;
+    float argmin;
+
+    for(int i = 0; i < diffArrayLengthPerRotation; i++){
+      if(diffArray[rotation * diffArrayLengthPerRotation + i] < min){
+        min = diffArray[rotation * diffArrayLengthPerRotation + i];
+        argmin = i + rotation * diffArrayLengthPerRotation;
+      }
+    }
+
+    // verify min
+    if(argmin != minArray[rotation*64]){
+      issues++;
+      printf("RotationNo = %d | CPU argmin = %f (%f)| GPU argmin = %f (%f)\n",rotation,argmin,min,minArray[rotation*64],
+                                                                              diffArray[(int)minArray[rotation*64]]);
+    }
+
+  }
+
+  return issues; 
+
+}

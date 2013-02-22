@@ -795,7 +795,7 @@ kernel void diffCoarse( global   float * tmp,
   barrier(CLK_LOCAL_MEM_FENCE);
 
   //
-  // *** this bit is quite slow - 0.10ms for 512x512 input
+  // *** this bit is quite slow - 0.2ms for 512x512 input
   //
   // put them in local memory
   lclTrg[0][lid] = diffs;
@@ -837,6 +837,8 @@ kernel void transposeRotations(global float * in,
 
   lcl[lid] = in[gy * width * ROTATIONS_NO + gx];
 
+  barrier(CLK_LOCAL_MEM_FENCE);
+
   // will have 32 threads per target rotation
   const int rotation = lid / SEGMENT_SIZE;
 
@@ -864,54 +866,190 @@ kernel void reduceMin(global float * in,
     // perform first level of reduction,
     // reading from global memory, writing to shared memory
     const unsigned int lid = get_local_id(0);
-    const unsigned int i = get_group_id(0) * (get_local_size(0) * 2) + get_local_id(0);
+    const unsigned int i = get_group_id(0) * (get_local_size(0) * 1) + lid;
 
-    lcl[lid] = ((i < size) ? in[i] : 0);
-    if(i + WGX_REDUCEMIN < size)
+    unsigned int isLess;
+    if(i < size){
+      lcl[lid] = in[get_global_id(0)];
+    }
+    else{ lcl[lid] = 999; return; }
+
+/*    if(i + WGX_REDUCEMIN < size){
+
+       argmin = (isless(lcl[lid],in[i + WGX_REDUCEMIN]) ? argmin : i + WGX_REDUCEMIN);
        lcl[lid] = min(lcl[lid],in[i + WGX_REDUCEMIN]);
+
+    }*/
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
+    if(WGX_REDUCEMIN == 512){
+      if(lid < 256){
+
+        isLess = isless(lcl[lid], lcl[lid + 256]);
+        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 256]);
+        lcl[lid + 256] = (isLess ? lid : lid + 256);
+
+      }
+    }
+    else if(WGX_REDUCEMIN == 256){
+      if(lid < 128){
+
+        isLess = isless(lcl[lid], lcl[lid + 128]);
+        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 128]);
+        lcl[lid + 128] = (isLess ? lid : lid + 128);
+
+      }
+    }
+    else if(WGX_REDUCEMIN == 128){
+      if(lid < 64){
+
+        isLess = isless(lcl[lid], lcl[lid + 64]);
+        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 64]);
+        lcl[lid + 64] = (isLess ? lid : lid + 64);   
+
+      }
+    }
+
+    barrier(CLK_LOCAL_MEM_FENCE); 
+
     // do reduction in shared mem
-    if(WGX_REDUCEMIN >= 512) { if(lid < 256) { lcl[lid] = min(lcl[lid],lcl[lid + 256]); } barrier(CLK_LOCAL_MEM_FENCE); }
-    if(WGX_REDUCEMIN >= 256) { if(lid < 128) { lcl[lid] = min(lcl[lid],lcl[lid + 128]); } barrier(CLK_LOCAL_MEM_FENCE); }
-    if(WGX_REDUCEMIN >= 128) { if(lid <  64) { lcl[lid] = min(lcl[lid],lcl[lid +  64]); } barrier(CLK_LOCAL_MEM_FENCE); }
+    if(WGX_REDUCEMIN > 256) {
+      if(lid < 128) {
+
+        isLess = isless(lcl[lid],lcl[lid + 128]);
+        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 128]);
+        lcl[lid + 128] = (isLess ? lcl[lid + 256] : lcl[lid + 128 + 256]);
+
+      }
+      barrier(CLK_LOCAL_MEM_FENCE); 
+    }
+    if(WGX_REDUCEMIN > 128) {
+      if(lid < 64) {
+
+        isLess = isless(lcl[lid],lcl[lid + 64]);
+        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 64]);
+        lcl[lid + 64] = (isLess ? lcl[lid + 128] : lcl[lid + 64 + 128]);
+
+      }
+      barrier(CLK_LOCAL_MEM_FENCE); 
+    }
     
     if (lid < 32)
     {
-        if(WGX_REDUCEMIN >=  64) { lcl[lid] = min(lcl[lid],lcl[lid + 32]); }
-        if(WGX_REDUCEMIN >=  32) { lcl[lid] = min(lcl[lid],lcl[lid + 16]); }
-        if(WGX_REDUCEMIN >=  16) { lcl[lid] = min(lcl[lid],lcl[lid +  8]); }
-        if(WGX_REDUCEMIN >=   8) { lcl[lid] = min(lcl[lid],lcl[lid +  4]); }
-        if(WGX_REDUCEMIN >=   4) { lcl[lid] = min(lcl[lid],lcl[lid +  2]); }
-        if(WGX_REDUCEMIN >=   2) { lcl[lid] = min(lcl[lid],lcl[lid +  1]); }
+        // Might need to end threads after each step...
+
+        // Assuming WGX_REDUCEMIN >= 128
+        isLess = isless(lcl[lid], lcl[lid + 32]);
+        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 32]);
+        lcl[lid + 32] = (isLess ? lcl[lid + 64] : lcl[lid + 32 + 64]);
+
+        if(lid < 16){
+          // Assuming WGX_REDUCEMIN >= 64
+          isLess = isless(lcl[lid], lcl[lid + 16]);
+          lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 16]);
+          lcl[lid + 16] = (isLess ? lcl[lid + 32] : lcl[lid + 16 + 32]);
+        }
+
+        if(lid < 8){
+          // Assuming WGX_REDUCEMIN >= 32
+          isLess = isless(lcl[lid], lcl[lid + 8]);
+          lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 8]);
+          lcl[lid + 8] = (isLess ? lcl[lid + 16] : lcl[lid + 8 + 16]);
+        }
+
+        if(lid < 4){
+          // Assuming WGX_REDUCEMIN >= 16
+          isLess = isless(lcl[lid], lcl[lid + 4]);
+          lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 4]);
+          lcl[lid + 4] = (isLess ? lcl[lid + 8] : lcl[lid + 4 + 8]);
+        }
+
+        if(lid < 2){
+          // Assuming WGX_REDUCEMIN >= 8
+          isLess = isless(lcl[lid], lcl[lid + 2]);
+          lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 2]);
+          lcl[lid + 2] = (isLess ? lcl[lid + 4] : lcl[lid + 2 + 4]);
+        }
+
+        if(lid < 1){
+          // Assuming WGX_REDUCEMIN >= 4
+          isLess = isless(lcl[lid], lcl[lid + 1]);
+          lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 1]);
+          lcl[lid + 1] = (isLess ? lcl[lid + 2] : lcl[lid + 1 + 2]);
+        }
+
     }
     
+    const int groups = get_num_groups(0);
     const int wgid = get_group_id(0);
-    const int dstOffset = (get_global_offset(0) / size) * (size / WGX_REDUCEMIN);
-    out += dstOffset;
+    const int dstOffset = (get_global_offset(0) / size) * groups;
 
     // write result for this block to global mem 
-    if(lid == 0) out[wgid] = lcl[0];
+    if(lid == 0) out[dstOffset + wgid] = get_global_offset(0) + (i - lid) + lcl[1];
 
+}
 
-    // now continue to find maximum between all the blocks
-    if(wgid == 0 && lid < 64){
+//
+// Reduce the minima given by the workgroups of reduceMin but for all rotations
+//
+//#define WGX_REDUCEMINALL = minimaPerRotation = (coarseHeight*coarseWidth / WGX_REDUCEMIN) = 64 for now
+kernel void reduceMinAll(global float * in,
+                         global float * out,
+                         const  int     minimaPerRotation,
+                         local  float * lcl){
 
-      lcl[lid] = out[wgid];
+    unsigned int isLess;
+    const int wgid = get_group_id(0); // rotationNo
+    const int lid = get_local_id(0);
 
-      if(lid < 32) {
-        lcl[lid] = min(lcl[lid],lcl[lid + 32]);
-        lcl[lid] = min(lcl[lid],lcl[lid + 16]);
-        lcl[lid] = min(lcl[lid],lcl[lid +  8]);
-        lcl[lid] = min(lcl[lid],lcl[lid +  4]);
-        lcl[lid] = min(lcl[lid],lcl[lid +  2]);
-        lcl[lid] = min(lcl[lid],lcl[lid +  1]); 
-      }
+    lcl[lid] = in[(int)(out[wgid * minimaPerRotation + lid])];
 
-      if(lid == 0) out[(get_global_offset(0) / size)] = lcl[0];
+    barrier(CLK_LOCAL_MEM_FENCE); 
 
+    if(lid < 32){
+      // Assuming WGX_REDUCEMIN >= 128
+      isLess = isless(lcl[lid], lcl[lid + 32]);
+      lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 32]);
+      lcl[lid + 32] = (isLess ? out[wgid * minimaPerRotation + lid] : out[wgid * minimaPerRotation + lid + 32]);
     }
+
+    if(lid < 16){
+      // Assuming WGX_REDUCEMIN >= 64
+      isLess = isless(lcl[lid], lcl[lid + 16]);
+      lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 16]);
+      lcl[lid + 16] = (isLess ? lcl[lid + 32] : lcl[lid + 16 + 32]);
+    }
+
+    if(lid < 8){
+      // Assuming WGX_REDUCEMIN >= 32
+      isLess = isless(lcl[lid], lcl[lid + 8]);
+      lcl[lid] = min(lcl[lid], lcl[lid + 8]);
+      lcl[lid + 8] = (isLess ? lcl[lid + 16] : lcl[lid + 8 + 16]);
+    }
+
+    if(lid < 4){
+      // Assuming WGX_REDUCEMIN >= 16
+      isLess = isless(lcl[lid], lcl[lid + 4]);
+      lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 4]);
+      lcl[lid + 4] = (isLess ? lcl[lid + 8] : lcl[lid + 4 + 8]);
+    }
+
+    if(lid < 2){
+      // Assuming WGX_REDUCEMIN >= 8
+      isLess = isless(lcl[lid], lcl[lid + 2]);
+      lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 2]);
+      lcl[lid + 2] = (isLess ? lcl[lid + 4] : lcl[lid + 2 + 4]);
+    }
+
+    if(lid < 1){
+      // Assuming WGX_REDUCEMIN >= 4
+      isLess = isless(lcl[lid], lcl[lid + 1]);
+      lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 1]);
+      lcl[lid + 1] = (isLess ? lcl[lid + 2] : lcl[lid + 1 + 2]);
+    }
+
+    if(lid == 0) out[wgid * minimaPerRotation] = lcl[1];
 
 }
 
