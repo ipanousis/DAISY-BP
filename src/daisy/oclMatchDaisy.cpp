@@ -435,31 +435,32 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                         const    int     regionNo,
                         const    int     rotationNo)*/  
 
+  for(int petalRegionNo = 2; petalRegionNo > -1; petalRegionNo--){
 
-  int rotationNo = ((votedRotation-2) + ROTATIONS_NO) % ROTATIONS_NO;
-  int regionNo = 2;
+    int rotationNo = ((votedRotation-2) + ROTATIONS_NO) % ROTATIONS_NO;
+    int regionNo = petalRegionNo;
 
-  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 0, sizeof(templateBuffer), (void*)&templateBuffer);
-  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 1, sizeof(targetBuffer), (void*)&targetBuffer);
-  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 2, sizeof(diffBuffer), (void*)&diffBuffer);
-  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 3, sizeof(corrsBuffer), (void*)&corrsBuffer);
-  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 4, sizeof(int), (void*)&regionNo);
-  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 5, sizeof(int), (void*)&rotationNo);
+    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 0, sizeof(templateBuffer), (void*)&templateBuffer);
+    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 1, sizeof(targetBuffer), (void*)&targetBuffer);
+    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 2, sizeof(diffBuffer), (void*)&diffBuffer);
+    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 3, sizeof(corrsBuffer), (void*)&corrsBuffer);
+    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 4, sizeof(int), (void*)&regionNo);
+    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 5, sizeof(int), (void*)&rotationNo);
 
+    // Compute diffMiddle
+    const size_t wgsDiffMiddle[2] = { 32, 1};
+    int targetPixelsPerWorkgroup = 8;
+    int workersPerTargetPixel = wgsDiffMiddle[0] / targetPixelsPerWorkgroup;
+    const size_t wsDiffMiddle[2] = { searchWidthRefined * searchWidthRefined * workersPerTargetPixel, seedTemplatePointsNo };
 
-  // Compute diffMiddle
-  const size_t wgsDiffMiddle[2] = { 64, 1};
-  int targetPixelsPerWorkgroup = 4;
-  int workersPerTargetPixel = wgsDiffMiddle[0] / targetPixelsPerWorkgroup;
-  const size_t wsDiffMiddle[2] = { searchWidthRefined * searchWidthRefined * workersPerTargetPixel, seedTemplatePointsNo };
+    printf("\nTotal Workers = [%d,%d], WorkersPerTargetPixel = %d, Workgroup Size = [%d,%d]\n",wsDiffMiddle[0],wsDiffMiddle[1],
+                                        workersPerTargetPixel,wgsDiffMiddle[0],wgsDiffMiddle[1]);
 
-  printf("\nTotal Workers = [%d,%d], WorkersPerTargetPixel = %d, Workgroup Size = [%d,%d]\n",wsDiffMiddle[0],wsDiffMiddle[1],
-                                      workersPerTargetPixel,wgsDiffMiddle[0],wgsDiffMiddle[1]);
+    error = clEnqueueNDRangeKernel(daisyCl->ioqueue, daisyTemplate->oclKernels->diffMiddle, 2, 
+                                   NULL, wsDiffMiddle, wgsDiffMiddle, 
+                                   0, NULL, NULL);
 
-  error = clEnqueueNDRangeKernel(daisyCl->ioqueue, daisyTemplate->oclKernels->diffMiddle, 2, 
-                                 NULL, wsDiffMiddle, wgsDiffMiddle, 
-                                 0, NULL, NULL);
-
+  }
 
   error = clFinish(daisyCl->ioqueue);
 
