@@ -20,7 +20,7 @@ void displayTimes(daisy_params * daisy,time_params * times);
 void writeInfofile(daisy_params * daisy, char * binaryfile);
 void profileSpeed(short int cpuTransfer);
 void runDaisy(char * filename, short int saveBinary);
-void runMatcher();
+void runMatcher(char * f1, char * f2);
 
 int main( int argc, char **argv  )
 {
@@ -59,7 +59,10 @@ int main( int argc, char **argv  )
     /* do matching */
     counter++;
 
-    runMatcher();
+    char * filename1 = argv[counter++];
+    char * filename2 = argv[counter++];
+
+    runMatcher(filename1,filename2);
 
   }
   else{
@@ -70,7 +73,7 @@ int main( int argc, char **argv  )
   return 0;
 }
 
-void runMatcher(){
+void runMatcher(char * f1, char * f2){
 
   time_params * times = (time_params*) malloc(sizeof(time_params));
   times->measureDeviceHostTransfers = 0;
@@ -80,8 +83,8 @@ void runMatcher(){
 
   ocl_constructs * daisyCl = newOclConstructs(0,0,0);
 
-  daisy_params * daisyTemplate = initDaisy("test-data/template.jpg",0);
-  daisy_params * daisyTarget = initDaisy("test-data/bg-frames/frame-0570s.png",0);
+  daisy_params * daisyTemplate = initDaisy(f1,0);
+  daisy_params * daisyTarget = initDaisy(f2,0);
 
   initOcl(daisyTemplate, daisyCl);
   initOclMatch(daisyTemplate,daisyCl);

@@ -35,9 +35,6 @@ using kutility::point_transform_via_homography;
 using kutility::load_gray_image;
 using kutility::save_binary;
 
-#define min(a,b) (a > b ? b : a)
-#define max(a,b) (a > b ? a : b)
-
 //#define TEST_FETCHDAISY
 //#define CPU_VERIFICATION
 
@@ -63,6 +60,7 @@ typedef struct ocl_daisy_kernels_tag{
   cl_kernel reduceMin;
   cl_kernel reduceMinAll;
   cl_kernel normaliseRotation;
+  cl_kernel diffMiddle;
   unsigned int kernelsNo;
 } ocl_daisy_kernels;
 #endif
@@ -79,7 +77,6 @@ typedef struct ocl_daisy_kernels_tag{
 #define DESCRIPTOR_LENGTH (TOTAL_PETALS_NO * GRADIENTS_NO)
 
 #ifndef DAISY_PARAMS
-
 #define DAISY_PARAMS
 typedef struct daisy_params_tag{
   char * filename;
