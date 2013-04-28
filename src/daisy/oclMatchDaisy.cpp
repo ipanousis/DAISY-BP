@@ -448,8 +448,8 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
     clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 5, sizeof(int), (void*)&rotationNo);
 
     // Compute diffMiddle
-    const size_t wgsDiffMiddle[2] = { 32, 1};
-    int targetPixelsPerWorkgroup = 8;
+    const size_t wgsDiffMiddle[2] = { 64, 1};
+    int targetPixelsPerWorkgroup = 32;
     int workersPerTargetPixel = wgsDiffMiddle[0] / targetPixelsPerWorkgroup;
     const size_t wsDiffMiddle[2] = { searchWidthRefined * searchWidthRefined * workersPerTargetPixel, seedTemplatePointsNo };
 
