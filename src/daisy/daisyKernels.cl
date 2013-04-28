@@ -738,10 +738,11 @@ kernel void fetchDaisy(global float * array)
 
 #define TMP_PETALS_NO 8
 #define TRG_PIXELS_NO 2
+#define TRG_PER_LOOP 2
 #define WGX_MATCH_COARSE 64
 #define SUBSAMPLE 4
 
-#define DIFFS ((TRG_PIXELS_NO * TMP_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO) / WGX_MATCH_COARSE)
+#define DIFFS ((TRG_PER_LOOP * TMP_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO) / WGX_MATCH_COARSE)
 
 kernel void diffCoarse( global   float * tmp,
                         global   float * trg,
@@ -750,80 +751,90 @@ kernel void diffCoarse( global   float * tmp,
                         const    int     regionNo)
 {
 
-  local float lclTrg[TRG_PIXELS_NO][REGION_PETALS_NO * GRADIENTS_NO];
+  local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO];
+  local float lclTrg[TRG_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO];
 
   const int lid = get_local_id(0);
   const int gx = get_global_id(0);
   const int gy = get_global_id(1);
 
-  // fetch target pixels to local memory; GRADIENTS_NO x REGION_PETALS_NO x TRG_PIXELS_NO (128 = 2 steps)
-  int i;
-  for(i = 0; i < (TRG_PIXELS_NO * REGION_PETALS_NO * GRADIENTS_NO) / WGX_MATCH_COARSE; i++){
+  // fetch template pixel
+  lclTmp[lid] = tmp[(regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lid];
+//  lclTmp[lx+32] = tmp[templateOffset * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx+32];
 
-    lclTrg[i][lid] = 
+  int targetStep;
+  for(targetStep = 0; targetStep < TRG_PIXELS_NO / TRG_PER_LOOP; targetStep++){
 
-      trg[((gy * SUBSAMPLE + (SUBSAMPLE / 2 -1)) * width + ((gx / WGX_MATCH_COARSE) * TRG_PIXELS_NO + i) * 
-           SUBSAMPLE + (SUBSAMPLE / 2 -1)) * DESCRIPTOR_LENGTH + 
-           (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lid];
+    // fetch target pixels to local memory; GRADIENTS_NO x REGION_PETALS_NO x TRG_PER_LOOP
+    int i;
+    for(i = 0; i < TRG_PER_LOOP; i++){
 
-  }
+      lclTrg[i * WGX_MATCH_COARSE + lid] = 
 
-  barrier(CLK_LOCAL_MEM_FENCE);
+        trg[((gy * SUBSAMPLE + (SUBSAMPLE / 2 -1)) * width + ((gx / WGX_MATCH_COARSE) * TRG_PIXELS_NO + targetStep * TRG_PER_LOOP + i) * 
+             SUBSAMPLE + (SUBSAMPLE / 2 -1)) * DESCRIPTOR_LENGTH + 
+             (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lid];
 
-  // do 4 diffs and sum them
-  float diffs = 0.0;
-  
-  for(i = 0; i < DIFFS; i++){
+    }
 
-    // first 32 threads do diffs for the first pixel, others for the second pixel
-    // first 4 threads do diffs for rotation 0, next 4 threads rotation 1....
-    const int pixelNo = lid / (WGX_MATCH_COARSE / TRG_PIXELS_NO);
-    const int rotationNo = (lid / (WGX_MATCH_COARSE / (TRG_PIXELS_NO * ROTATIONS_NO))) % ROTATIONS_NO; 
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-    const int petalNo = (lid % 4) * 2; // first template petal
+    // do 4 diffs and sum them
+    float diffs = 0.0;
+    
+    for(i = 0; i < DIFFS; i++){
 
-    // get these by rotationNo and lid
-    const int trgPetal = (petalNo + rotationNo) % REGION_PETALS_NO;
-    const int trgFirstGradient = rotationNo;
+      // first 32 threads do diffs for the first pixel, others for the second pixel
+      // first 4 threads do diffs for rotation 0, next 4 threads rotation 1....
+      const int pixelNo = lid / (WGX_MATCH_COARSE / TRG_PER_LOOP);
+      const int rotationNo = (lid / (WGX_MATCH_COARSE / (TRG_PER_LOOP * ROTATIONS_NO))) % ROTATIONS_NO; 
 
-    // pick pixel, pick rotation => pick petal, pick gradient
-    diffs += fabs(tmp[(petalNo + regionNo * REGION_PETALS_NO) * GRADIENTS_NO + i] - 
-                  lclTrg[pixelNo][((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
-                                  (trgFirstGradient + i) % GRADIENTS_NO]);
+      const int petalNo = (lid % 4) * 2; // first template petal
 
-  }
+      // get these by rotationNo and lid
+      const int trgPetal = (petalNo + rotationNo) % REGION_PETALS_NO;
+      const int trgFirstGradient = rotationNo;
 
-  barrier(CLK_LOCAL_MEM_FENCE);
+      // pick pixel, pick rotation => pick petal, pick gradient
+      diffs += fabs(lclTmp[(petalNo + regionNo * REGION_PETALS_NO) * GRADIENTS_NO + i] - 
+                    lclTrg[pixelNo * REGION_PETALS_NO * GRADIENTS_NO + 
+                              ((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
+                               (trgFirstGradient + i) % GRADIENTS_NO]);
 
-  //
-  // *** this bit is quite slow - 0.2ms for 512x512 input
-  //
-  // put them in local memory
-  lclTrg[0][lid] = diffs;
+    }
 
-  barrier(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-  // the first 32 threads sum half of the 64 values
-  if(lid < WGX_MATCH_COARSE / TRG_PIXELS_NO)
-    lclTrg[0][lid * 2] = lclTrg[0][lid * 2] + 
-                         lclTrg[0][lid * 2 + 1];
+    //
+    // *** this bit is quite slow - 0.2ms for 512x512 input
+    //
+    // put them in local memory
+    lclTrg[lid] = diffs;
 
-  barrier(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-  // the first 16 threads sum the half of half
-  if(lid < (WGX_MATCH_COARSE / (TRG_PIXELS_NO * 2))){
+    // the first 32 threads sum half of the 64 values
+    if(lid < WGX_MATCH_COARSE / 2)
+      lclTrg[lid * 2] = lclTrg[lid * 2] + 
+                        lclTrg[lid * 2 + 1];
 
-    diffs = lclTrg[0][lid * 4] + lclTrg[0][lid * 4 + 2];
 
-    // first 16 fetch and write to global
-    out[(gy * (width / SUBSAMPLE) + gx / (WGX_MATCH_COARSE / TRG_PIXELS_NO)) * 
-            ROTATIONS_NO + lid] = 
+    // the first 16 threads sum the half of half
+    if(lid < WGX_MATCH_COARSE / 4){
 
-        (regionNo < 2 ? 
+      diffs = lclTrg[lid * 4] + lclTrg[lid * 4 + 2];
 
-            out[(gy * (width / SUBSAMPLE) + gx / (WGX_MATCH_COARSE / TRG_PIXELS_NO)) * ROTATIONS_NO + lid]
-              
-                : 0) + diffs;
+      // first 16 fetch and write to global
+      out[(gy * (width / SUBSAMPLE) + gx / (WGX_MATCH_COARSE / TRG_PIXELS_NO) + targetStep * TRG_PER_LOOP) * 
+              ROTATIONS_NO + lid] = 
+
+          (regionNo < 2 ? 
+
+              out[(gy * (width / SUBSAMPLE) + gx / (WGX_MATCH_COARSE / TRG_PIXELS_NO) + targetStep * TRG_PER_LOOP) * ROTATIONS_NO + lid]
+                
+                  : 0) + diffs;
+
+    }
 
   }
 
@@ -1113,8 +1124,8 @@ kernel void diffMiddle( global   float * tmp,
 
   const int lx = get_local_id(0);
 
-  local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO];
-  local float lclTrg[TARGETS_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO];
+  local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO + 1];
+  local float lclTrg[TARGETS_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO + 1];
 
 //
 // FIX IT !!!!!!!!!
@@ -1126,7 +1137,7 @@ kernel void diffMiddle( global   float * tmp,
 
   // fetch template pixel
   lclTmp[lx] = tmp[templateOffset * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
-  lclTmp[lx+32] = tmp[templateOffset * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx+32];
+  lclTmp[lx + 32 + 1] = tmp[templateOffset * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx+32];
 
   int targetStep;
 //  for(i = 0; i < (TRG_PIXELS_NO * REGION_PETALS_NO * GRADIENTS_NO) / WGX_MATCH_COARSE; i++){
@@ -1136,12 +1147,12 @@ kernel void diffMiddle( global   float * tmp,
     // fetch TARGETS_PER_LOOP target pixels to lclTrg; GRADIENTS_NO x REGION_PETALS_NO x TARGETS_PER_LOOP
     for(i = 0; i < TARGETS_PER_LOOP; i++){
 
-      lclTrg[i * WGX_MATCH_MIDDLE + lx] = 
+      lclTrg[i * (WGX_MATCH_MIDDLE * 2 + 1) + lx] = 
 
         trg[(targetOffset + (targetStep * TARGETS_PER_LOOP + i) * PIXEL_SPACING) * DESCRIPTOR_LENGTH 
                           + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
 
-      lclTrg[i * WGX_MATCH_MIDDLE + lx+32] = 
+      lclTrg[i * (WGX_MATCH_MIDDLE * 2 + 1) + lx + 32] = 
 
         trg[(targetOffset + (targetStep * TARGETS_PER_LOOP + i) * PIXEL_SPACING) * DESCRIPTOR_LENGTH 
                           + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx+32];
@@ -1171,8 +1182,9 @@ kernel void diffMiddle( global   float * tmp,
       const int trgFirstGradient = rotationNo;
 
       // pick pixel, pick rotation => pick petal, pick gradient
-      diffs += fabs(lclTmp[petalNo * GRADIENTS_NO + (lx % 2) * 0 + i] - 
-                    lclTrg[((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
+      diffs += fabs(lclTmp[(petalNo / 4) + petalNo * GRADIENTS_NO + (lx % 2) * 0 + i] -   // (petalNo / 4) is padding that speeds up by 1ms
+                    lclTrg[pixelNo * (REGION_PETALS_NO * GRADIENTS_NO + 1) +              // the +1 is padding that speeds up by 1ms
+                            ((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
                             (trgFirstGradient + (lx % 2) * 0 + i) % GRADIENTS_NO]);
 
     }
