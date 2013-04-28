@@ -129,7 +129,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
 
   cl_int error = 0;
 
-  int templatePointsNo = 36;
+  int templatePointsNo = 16;
   point * templatePoints = generateTemplatePoints(daisyTemplate, templatePointsNo, 0, 0);
 
   cl_mem templateBuffer = daisyTemplate->buffers[0];
@@ -333,7 +333,6 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                               0, argminBufferLength * sizeof(float), pinnedArgminArray,
                               1, &lastReduction, NULL);
 
-
   //
   // Process correspondences
   //
@@ -436,6 +435,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                         const    int     regionNo,
                         const    int     rotationNo)*/  
 
+
   int rotationNo = ((votedRotation-2) + ROTATIONS_NO) % ROTATIONS_NO;
   int regionNo = 2;
 
@@ -448,19 +448,26 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
 
 
   // Compute diffMiddle
-  const size_t wgsDiffMiddle = 64;
-  int targetPixelsPerWorkgroup = 2;
-  int workersPerTargetPixel = wgsDiffMiddle / targetPixelsPerWorkgroup;
-  const size_t wsDiffMiddle = seedTemplatePointsNo * searchWidthRefined * searchWidthRefined * workersPerTargetPixel;
+  const size_t wgsDiffMiddle[2] = { 64, 1};
+  int targetPixelsPerWorkgroup = 4;
+  int workersPerTargetPixel = wgsDiffMiddle[0] / targetPixelsPerWorkgroup;
+  const size_t wsDiffMiddle[2] = { searchWidthRefined * searchWidthRefined * workersPerTargetPixel, seedTemplatePointsNo };
 
-  error = clEnqueueNDRangeKernel(daisyCl->ioqueue, daisyTemplate->oclKernels->diffMiddle, 1, 
-                                 NULL, &wsDiffMiddle, &wgsDiffMiddle, 
+  printf("\nTotal Workers = [%d,%d], WorkersPerTargetPixel = %d, Workgroup Size = [%d,%d]\n",wsDiffMiddle[0],wsDiffMiddle[1],
+                                      workersPerTargetPixel,wgsDiffMiddle[0],wgsDiffMiddle[1]);
+
+  error = clEnqueueNDRangeKernel(daisyCl->ioqueue, daisyTemplate->oclKernels->diffMiddle, 2, 
+                                 NULL, wsDiffMiddle, wgsDiffMiddle, 
                                  0, NULL, NULL);
 
 
   error = clFinish(daisyCl->ioqueue);
 
   if(oclErrorM("oclMatchDaisy","clFinish",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
+
+  gettimeofday(&times->endConv,NULL);
+
+  times->difft = timeDiff(times->startConv,times->endConv);
 
   printf("Match: %.2f ms\n",times->difft);
 
