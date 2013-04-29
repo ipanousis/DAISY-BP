@@ -1117,7 +1117,11 @@ kernel void diffMiddle( global   float * tmp,
                         const    int     startRotationNo)
 {
 
+  local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO + 1];
+  local float lclTrg[TARGETS_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO + LCL_PADDING)];
+
   const int gx = get_global_id(0);
+  const int lx = get_local_id(0);
 
   // get template pixel no
   const int templateNo = get_global_id(1);
@@ -1125,18 +1129,7 @@ kernel void diffMiddle( global   float * tmp,
   const int searchOffset = ((searchNo / SEARCH_WIDTH) - SEARCH_WIDTH / 2) * width 
                          + ((searchNo % SEARCH_WIDTH) - SEARCH_WIDTH / 2);
 
-  const int lx = get_local_id(0);
-
-  local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO + 1];
-  local float lclTrg[TARGETS_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO + LCL_PADDING)];
-
-//
-// FIX IT !!!!!!!!!
-//
-//  const int templateOffset = corrs[templateNo * 2];
   const int targetOffset = (int)corrs[templateNo * 2 + 1] + searchOffset;
-//  const int templateOffset = templateNo;
-//  const int targetOffset = templateNo;
 
   // fetch template pixel
   if(lx < 64)
