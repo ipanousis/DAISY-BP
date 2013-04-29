@@ -1090,17 +1090,19 @@ kernel void normaliseRotation(global float * data,
 // 512 template points
 //
 //
-#define TEMPLATE_POINTS_NO 512
+#define TEMPLATE_POINTS_NO 256
 #define SEARCH_WIDTH 32
 #define PIXEL_SPACING 2
 #define ROTATIONS_NO_MIDDLE 4
 
-// OPTIMAL: WGX = 64, WG_TARGETS_NO = 32, TARGETS_PER_LOOP = 8
-#define WGX_MATCH_MIDDLE 64
+// OPTIMAL: WGX = 128, WG_TARGETS_NO = 32, TARGETS_PER_LOOP = 8
+#define WGX_MATCH_MIDDLE 128
 #define WG_TARGETS_NO 32
 #define WORKERS_PER_TEMPLATE ((SEARCH_WIDTH * SEARCH_WIDTH) / WG_TARGETS_NO) * WGX_MATCH_MIDDLE
 #define TARGETS_PER_LOOP 8
+#define TARGETS_PER_WG (WGX_MATCH_MIDDLE / (REGION_PETALS_NO * GRADIENTS_NO))
 #define DIFFSM (TARGETS_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO_MIDDLE) / WGX_MATCH_MIDDLE
+#define LCL_PADDING 2
 
 // tmp - get template descriptors from
 // trg - get target descriptors from
@@ -1125,7 +1127,7 @@ kernel void diffMiddle( global   float * tmp,
   const int lx = get_local_id(0);
 
   local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO + 1];
-  local float lclTrg[TARGETS_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO + 2)];
+  local float lclTrg[TARGETS_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO + LCL_PADDING)];
 
 //
 // FIX IT !!!!!!!!!
@@ -1137,30 +1139,27 @@ kernel void diffMiddle( global   float * tmp,
 
   // fetch template pixel
   lclTmp[lx] = tmp[templateOffset * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
-//  lclTmp[lx + 32 + 1] = tmp[templateOffset * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx+32];
 
   int targetStep;
-//  for(i = 0; i < (TRG_PIXELS_NO * REGION_PETALS_NO * GRADIENTS_NO) / WGX_MATCH_COARSE; i++){
   for(targetStep = 0; targetStep < (WG_TARGETS_NO / TARGETS_PER_LOOP); targetStep++){
 
     int i;
     // fetch TARGETS_PER_LOOP target pixels to lclTrg; GRADIENTS_NO x REGION_PETALS_NO x TARGETS_PER_LOOP
-    for(i = 0; i < TARGETS_PER_LOOP; i++){
+    for(i = 0; i < TARGETS_PER_LOOP / (WGX_MATCH_MIDDLE / (REGION_PETALS_NO * GRADIENTS_NO)); i++){
 
-//      lclTrg[i * (WGX_MATCH_MIDDLE * 2 + 1) + lx] =
-      lclTrg[i * (WGX_MATCH_MIDDLE + 2) + lx] =  
+      lclTrg[i * (WGX_MATCH_MIDDLE + LCL_PADDING * TARGETS_PER_WG) + 
+              (lx / (REGION_PETALS_NO * GRADIENTS_NO)) * LCL_PADDING + lx] =  
 
-        trg[(targetOffset + (targetStep * TARGETS_PER_LOOP + i) * PIXEL_SPACING) * DESCRIPTOR_LENGTH 
-                          + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
 
-/*      lclTrg[i * (WGX_MATCH_MIDDLE * 2 + 1) + lx + 32] = 
+          trg[(targetOffset + (targetStep * TARGETS_PER_LOOP + i * TARGETS_PER_WG 
+                            + lx / (REGION_PETALS_NO * GRADIENTS_NO)) * PIXEL_SPACING) 
+                            * DESCRIPTOR_LENGTH 
 
-        trg[(targetOffset + (targetStep * TARGETS_PER_LOOP + i) * PIXEL_SPACING) * DESCRIPTOR_LENGTH 
-                          + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx+32];*/
+          + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx % (REGION_PETALS_NO * GRADIENTS_NO)];
+
 
     }
 
-    // !
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // do 4 rotation diffs
@@ -1170,74 +1169,50 @@ kernel void diffMiddle( global   float * tmp,
     
     for(i = 0; i < DIFFSM; i++){
 
-      // first 32 threads do diffs for the first pixel, others for the second pixel
-      // first 4 threads do diffs for rotation 0, next 4 threads rotation 1....
       const int pixelNo = lx / (WGX_MATCH_MIDDLE / TARGETS_PER_LOOP);
 
-      // IF WORKERS PER PETAL CHANGE THEN CHANGE THIS '2'
-//      const int petalNo = (lx / 1) % REGION_PETALS_NO; // first template petal
-//      const int petalNo = (lx % 4) * 2;
-      const int petalNo = (lx % 2) * 4;
-//      const int petalNo = 0; // with trgperloop 4
+      // IF WORKERS PER PETAL CHANGE THEN CHANGE THIS
+      //      const int petalNo = (lx / 1) % REGION_PETALS_NO; // first template petal
+      const int petalNo = (lx % 4) * 2;
+      //      const int petalNo = (lx % 2) * 4;
+      //      const int petalNo = 0; // with trgperloop 4
 
       // get these by rotationNo and lid
       const int trgPetal = (petalNo + rotationNo) % REGION_PETALS_NO;
       const int trgFirstGradient = rotationNo;
 
       // pick pixel, pick rotation => pick petal, pick gradient
-      diffs += fabs(lclTmp[petalNo * GRADIENTS_NO + (lx % 2) * 0 + i] -   // (petalNo / 4) is padding that speeds up by 1ms
-                    lclTrg[pixelNo * (REGION_PETALS_NO * GRADIENTS_NO + 2) +              // the +1 is padding that speeds up by 1ms
+      diffs += fabs(lclTmp[petalNo * GRADIENTS_NO + i] -                                  // (petalNo / 4) is padding that speeds up by 1ms
+
+                    lclTrg[pixelNo * (REGION_PETALS_NO * GRADIENTS_NO + LCL_PADDING) +    // the +1 is padding that speeds up by 1ms
+
                             ((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
-                            (trgFirstGradient + (lx % 2) * 0 + i) % GRADIENTS_NO]);
+
+                            (trgFirstGradient + i) % GRADIENTS_NO]);
 
     }
 
-    // !
     barrier(CLK_LOCAL_MEM_FENCE);
 
     //
     // put them in local memory
     lclTrg[lx] = diffs;
 
-    // !
-    //barrier(CLK_LOCAL_MEM_FENCE);
+    barrier(CLK_LOCAL_MEM_FENCE);
 
     // the first 32 threads sum 64 to 32
- /*   if(lx < WGX_MATCH_MIDDLE / 2){
+    if(lx < WGX_MATCH_MIDDLE / 2){
 
       lclTrg[lx * 2] = lclTrg[lx * 2] + 
                        lclTrg[lx * 2 + 1];
 
-    }*/
+    }
 
-    // the first 16 threads sum 32 to 16
-/*    if(lx < WGX_MATCH_MIDDLE / 4){
+    barrier(CLK_LOCAL_MEM_FENCE);
 
-      lclTrg[lx * 4] = lclTrg[lx * 4] + lclTrg[lx * 4 + 2];
+    if(lx < WGX_MATCH_MIDDLE / 4){
 
-    }*/
-
-    // the first 8 threads sum 16 to 8
-/*    if(lx < WGX_MATCH_MIDDLE / 8){
-
-      lclTrg[lx * 8] = lclTrg[lx * 8] + lclTrg[lx * 8 + 4];
-
-      barrier(CLK_LOCAL_MEM_FENCE);
-
-    }*/
-
-    // the first 4 threads sum 8 to 4
-//    if(lx < WGX_MATCH_MIDDLE / 16){
-//    if(lx < WGX_MATCH_MIDDLE / 8){
-//    if(lx < WGX_MATCH_MIDDLE / 4){
-
-//      diffs = lclTrg[lx * 16] + lclTrg[lx * 16 + 8];
-//      diffs = lclTrg[lx * 8] + lclTrg[lx * 8 + 4];
-//      diffs = lclTrg[lx * 4] + lclTrg[lx * 4 + 2];
-    if(lx < WGX_MATCH_MIDDLE / 2){
-
-      diffs = lclTrg[lx * 2] + 
-                       lclTrg[lx * 2 + 1];
+      diffs = lclTrg[lx * 4] + lclTrg[lx * 4 + 2];
 
       // first 16 fetch and write to global
       diff[templateNo * (SEARCH_WIDTH * SEARCH_WIDTH * ROTATIONS_NO_MIDDLE) + (searchNo + targetStep * TARGETS_PER_LOOP) 
@@ -1253,8 +1228,6 @@ kernel void diffMiddle( global   float * tmp,
     }
 
   }
-
-
 
 }
 
