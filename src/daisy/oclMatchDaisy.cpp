@@ -192,7 +192,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
   if(oclErrorM("oclDaisy","clEnqueueMapBuffer (pinnedArgmin)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
   // Setup diffCoarse kernel
-  int workersPerPixel = 32;
+  int workersPerPixel = 16;
   const size_t wgsDiffCoarse[2] = {64, 1};
   const size_t wsDiffCoarse[2] = {coarseWidth * workersPerPixel, coarseHeight};
 
@@ -597,9 +597,9 @@ long int verifyDiffCoarse(daisy_params * daisyTarget, float * petalArray,
         float gpudiff = diffArray[((targetY / subsample) * coarseWidth + targetX / subsample) * rotationsNo + rotation];
         if(fabs(gpudiff - diff) > 0.0001){
           issues++;
-          //if(shown++ < 100){
-          //  printf("X,Y,R = %d,%d,%d | CPU = %.3f and GPU = %.3f\n",targetX / subsample,targetY/subsample,rotation,diff,gpudiff);
-          //}
+//          if(shown++ < 100){
+//            printf("X,Y,R = %d,%d,%d | CPU = %.3f and GPU = %.3f\n",targetX / subsample,targetY/subsample,rotation,diff,gpudiff);
+//          }
         }
         else if(0 && shown++ < 200)
           printf("X,Y,R = %d,%d,%d | CPU = %.3f and GPU = %.3f\n",targetX / subsample,targetY/subsample,rotation,diff,gpudiff);

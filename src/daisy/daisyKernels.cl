@@ -737,7 +737,7 @@ kernel void fetchDaisy(global float * array)
 #define ROTATIONS_NO 8
 
 #define TMP_PETALS_NO 8
-#define TRG_PIXELS_NO 2
+#define TRG_PIXELS_NO 4
 #define TRG_PER_LOOP 2
 #define WGX_MATCH_COARSE 64
 #define SUBSAMPLE 4
@@ -752,15 +752,14 @@ kernel void diffCoarse( global   float * tmp,
 {
 
   local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO];
-  local float lclTrg[TRG_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO];
+  local float lclTrg[TRG_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO + 1];
 
   const int lid = get_local_id(0);
   const int gx = get_global_id(0);
   const int gy = get_global_id(1);
 
   // fetch template pixel
-  lclTmp[lid] = tmp[(regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lid];
-//  lclTmp[lx+32] = tmp[templateOffset * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx+32];
+  lclTmp[lid] = tmp[regionNo * REGION_PETALS_NO * GRADIENTS_NO + lid];
 
   int targetStep;
   for(targetStep = 0; targetStep < TRG_PIXELS_NO / TRG_PER_LOOP; targetStep++){
@@ -769,7 +768,7 @@ kernel void diffCoarse( global   float * tmp,
     int i;
     for(i = 0; i < TRG_PER_LOOP; i++){
 
-      lclTrg[i * WGX_MATCH_COARSE + lid] = 
+      lclTrg[i * (WGX_MATCH_COARSE+1) + lid] = 
 
         trg[((gy * SUBSAMPLE + (SUBSAMPLE / 2 -1)) * width + ((gx / WGX_MATCH_COARSE) * TRG_PIXELS_NO + targetStep * TRG_PER_LOOP + i) * 
              SUBSAMPLE + (SUBSAMPLE / 2 -1)) * DESCRIPTOR_LENGTH + 
@@ -796,18 +795,15 @@ kernel void diffCoarse( global   float * tmp,
       const int trgFirstGradient = rotationNo;
 
       // pick pixel, pick rotation => pick petal, pick gradient
-      diffs += fabs(lclTmp[(petalNo + regionNo * REGION_PETALS_NO) * GRADIENTS_NO + i] - 
-                    lclTrg[pixelNo * REGION_PETALS_NO * GRADIENTS_NO + 
-                              ((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
-                               (trgFirstGradient + i) % GRADIENTS_NO]);
+      diffs += fabs(lclTmp[petalNo * GRADIENTS_NO + i] - 
+                    lclTrg[pixelNo + pixelNo * REGION_PETALS_NO * GRADIENTS_NO + 
+                           ((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
+                            (trgFirstGradient + i) % GRADIENTS_NO]);
 
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    //
-    // *** this bit is quite slow - 0.2ms for 512x512 input
-    //
     // put them in local memory
     lclTrg[lid] = diffs;
 
@@ -834,7 +830,11 @@ kernel void diffCoarse( global   float * tmp,
                 
                   : 0) + diffs;
 
+    
+
     }
+
+    barrier(CLK_LOCAL_MEM_FENCE);
 
   }
 
@@ -1095,7 +1095,7 @@ kernel void normaliseRotation(global float * data,
 #define PIXEL_SPACING 2
 #define ROTATIONS_NO_MIDDLE 4
 
-// OPTIMAL: WGX = 64, WG_TARGETS_NO = 16, TARGETS_PER_LOOP = 8
+// OPTIMAL: WGX = 64, WG_TARGETS_NO = 32, TARGETS_PER_LOOP = 8
 #define WGX_MATCH_MIDDLE 64
 #define WG_TARGETS_NO 32
 #define WORKERS_PER_TEMPLATE ((SEARCH_WIDTH * SEARCH_WIDTH) / WG_TARGETS_NO) * WGX_MATCH_MIDDLE
@@ -1125,7 +1125,7 @@ kernel void diffMiddle( global   float * tmp,
   const int lx = get_local_id(0);
 
   local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO + 1];
-  local float lclTrg[TARGETS_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO ];
+  local float lclTrg[TARGETS_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO + 2)];
 
 //
 // FIX IT !!!!!!!!!
@@ -1148,7 +1148,7 @@ kernel void diffMiddle( global   float * tmp,
     for(i = 0; i < TARGETS_PER_LOOP; i++){
 
 //      lclTrg[i * (WGX_MATCH_MIDDLE * 2 + 1) + lx] =
-      lclTrg[i * (WGX_MATCH_MIDDLE) + lx] =  
+      lclTrg[i * (WGX_MATCH_MIDDLE + 2) + lx] =  
 
         trg[(targetOffset + (targetStep * TARGETS_PER_LOOP + i) * PIXEL_SPACING) * DESCRIPTOR_LENGTH 
                           + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
@@ -1176,9 +1176,9 @@ kernel void diffMiddle( global   float * tmp,
 
       // IF WORKERS PER PETAL CHANGE THEN CHANGE THIS '2'
 //      const int petalNo = (lx / 1) % REGION_PETALS_NO; // first template petal
-//      const int petalNo = (lx % 2) * 4;
 //      const int petalNo = (lx % 4) * 2;
-      const int petalNo = 0; // with trgperloop 4
+      const int petalNo = (lx % 2) * 4;
+//      const int petalNo = 0; // with trgperloop 4
 
       // get these by rotationNo and lid
       const int trgPetal = (petalNo + rotationNo) % REGION_PETALS_NO;
@@ -1186,7 +1186,7 @@ kernel void diffMiddle( global   float * tmp,
 
       // pick pixel, pick rotation => pick petal, pick gradient
       diffs += fabs(lclTmp[petalNo * GRADIENTS_NO + (lx % 2) * 0 + i] -   // (petalNo / 4) is padding that speeds up by 1ms
-                    lclTrg[pixelNo * (REGION_PETALS_NO * GRADIENTS_NO + 1) +              // the +1 is padding that speeds up by 1ms
+                    lclTrg[pixelNo * (REGION_PETALS_NO * GRADIENTS_NO + 2) +              // the +1 is padding that speeds up by 1ms
                             ((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
                             (trgFirstGradient + (lx % 2) * 0 + i) % GRADIENTS_NO]);
 
