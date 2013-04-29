@@ -1087,12 +1087,12 @@ kernel void normaliseRotation(global float * data,
 }
 
 //
-// 512 template points
+// 512 * N template points
 //
 //
-#define TEMPLATE_POINTS_NO 512
+//#define TEMPLATE_POINTS_NO 512 * N
 #define SEARCH_WIDTH 32
-#define PIXEL_SPACING 2
+#define PIXEL_SPACING 1
 #define ROTATIONS_NO_MIDDLE 4
 
 // OPTIMAL: WGX = 128, WG_TARGETS_NO = 32, TARGETS_PER_LOOP = 8
@@ -1114,7 +1114,8 @@ kernel void diffMiddle( global   float * tmp,
                         global   float * corrs,
                         const    int     width,
                         const    int     regionNo,
-                        const    int     startRotationNo)
+                        const    int     startRotationNo, 
+                        const    int     templateNoOffset)
 {
 
   local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO + 1];
@@ -1124,12 +1125,15 @@ kernel void diffMiddle( global   float * tmp,
   const int lx = get_local_id(0);
 
   // get template pixel no
-  const int templateNo = get_global_id(1);
+  const int templateNo = templateNoOffset + get_global_id(1);
   const int searchNo = (gx / WGX_MATCH_MIDDLE) * WG_TARGETS_NO;
-  const int searchOffset = ((searchNo / SEARCH_WIDTH) - SEARCH_WIDTH / 2) * width 
-                         + ((searchNo % SEARCH_WIDTH) - SEARCH_WIDTH / 2);
+  const int searchOffset = (((searchNo / SEARCH_WIDTH) - SEARCH_WIDTH / 2) * width 
+                         + ((searchNo % SEARCH_WIDTH) - SEARCH_WIDTH / 2)) * PIXEL_SPACING;
 
   const int targetOffset = (int)corrs[templateNo * 2 + 1] + searchOffset;
+
+  const int pixelNo = lx / (WGX_MATCH_MIDDLE / TARGETS_PER_LOOP);
+  const int rotNo = (lx / (WGX_MATCH_MIDDLE / (TARGETS_PER_LOOP * ROTATIONS_NO_MIDDLE))) % ROTATIONS_NO_MIDDLE;
 
   // fetch template pixel
   if(lx < 64)
@@ -1160,12 +1164,10 @@ kernel void diffMiddle( global   float * tmp,
 
     // do 4 rotation diffs
     float diffs = 0.0;
-    const int rotNo = (lx / (WGX_MATCH_MIDDLE / (TARGETS_PER_LOOP * ROTATIONS_NO_MIDDLE))) % ROTATIONS_NO_MIDDLE;
     const int rotationNo = (startRotationNo + rotNo) % ROTATIONS_NO;
     
     for(i = 0; i < DIFFSM; i++){
 
-      const int pixelNo = lx / (WGX_MATCH_MIDDLE / TARGETS_PER_LOOP);
 
       // IF WORKERS PER PETAL CHANGE THEN CHANGE THIS
       //      const int petalNo = (lx / 1) % REGION_PETALS_NO; // first template petal
@@ -1212,12 +1214,12 @@ kernel void diffMiddle( global   float * tmp,
 
       // first 16 fetch and write to global
       diff[templateNo * (SEARCH_WIDTH * SEARCH_WIDTH * ROTATIONS_NO_MIDDLE) + (searchNo + targetStep * TARGETS_PER_LOOP) 
-                      * ROTATIONS_NO_MIDDLE + rotNo] = 
+                      * ROTATIONS_NO_MIDDLE + lx] = 
 
           (regionNo < 2 ? 
 
               diff[templateNo * (SEARCH_WIDTH * SEARCH_WIDTH * ROTATIONS_NO_MIDDLE) + (searchNo + targetStep * TARGETS_PER_LOOP) 
-                              * ROTATIONS_NO_MIDDLE + rotNo]
+                              * ROTATIONS_NO_MIDDLE + lx]
                 
                   : 0) + diffs;
 
