@@ -1,5 +1,7 @@
 #include "general.h"
 #include <math.h>
+#include <string.h>
+#include <stdlib.h>
 
 point estimateObjectCentre(point * templatePoints, int * templateMatches, 
                            int * targetMatches, int corrsNo,
@@ -12,7 +14,7 @@ transform * minimise2dProjection(point * templatePoints, int * templateMatches,
                                  float * projectionErrors);
 
 void projectTargetSeeds(point * seedTemplatePoints, point * seedTargetPoints, int seedsNo,
-                        point * templatePoints,
+                        point * templatePoints, int * templateMatches,
                         int * matches, int matchesNo, point coarseTargetSize, transform * t);
 
 point projectPoint(point p, transform t);

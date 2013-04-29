@@ -1,5 +1,4 @@
 #include "oclMatchDaisy.h"
-#include <string.h>
 
 #define min(a,b) ( a < b ? a : b)
 #define max(a,b) ( a < b ? b : a)
@@ -80,19 +79,15 @@ point * generateTemplatePoints(daisy_params * daisy, int templatePointsNo, int x
   point * points = (point*) malloc(sizeof(point) * templatePointsNo);
 
   int boundaryOffset = 15;
-  int xRange = daisy->width - boundaryOffset * 2;
+  int xRange = daisy->width - boundaryOffset;
   int yRange = daisy->height - boundaryOffset * 2;
 
-//  int yStep = max(floor(yRange / sqrt(templatePointsNo)), 1);
-//  int xStep = max(floor(xRange / sqrt(templatePointsNo)), 1);
-//  printf("xrange,yrange,step | %d,%d,%d\n",xRange,yRange,step);
   int step = max(floor(sqrt((yRange * xRange) / templatePointsNo)), 1);
 
   int x = boundaryOffset;
   int y = boundaryOffset;
   for(int i = 0; i < templatePointsNo; i++){
 
-//    printf("(%d,%d), ",x,y);
     points[i].x = x; points[i].y = y;
 
     x += step;
@@ -100,15 +95,8 @@ point * generateTemplatePoints(daisy_params * daisy, int templatePointsNo, int x
     if(x > xRange){
       x = x % step + boundaryOffset;
       y = y + step;
-//      y = (y > yRange ? y % step + boundaryOffset : y);
+      //y = (y > yRange ? y % step + boundaryOffset : y);
     }
-
-//    if(x > xRange){
-//      x = x % xRange + boundaryOffset;
-//      y = (y + yStep);
-//      y = (y > yRange ? y % yRange + boundaryOffset : y);
-//    }
-
   }
 
   return points;
@@ -138,7 +126,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
   int gridSpacing = pow(SUBSAMPLE_RATE,2);
   int coarseWidth  = daisyTarget->paddedWidth  / gridSpacing;
   int coarseHeight = daisyTarget->paddedHeight / gridSpacing;
-  point coarseTemplateSize = { daisyTemplate->width  / gridSpacing, daisyTemplate->height  / gridSpacing };
+  point coarseTemplateSize = { daisyTemplate->paddedWidth  / gridSpacing, daisyTemplate->paddedHeight  / gridSpacing };
   point coarseTargetSize = { coarseWidth, coarseHeight };
   int rotationsNo = ROTATIONS_NO;
   int templatePetalsPerRun = 8;
@@ -153,6 +141,8 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
   printf("Matching coarse layer [%dx%d] (subsampled by %d) for %d rotations\n",
          coarseHeight,coarseWidth,(int)pow(SUBSAMPLE_RATE,2),rotationsNo);
 
+  int argminBufferLength = templatePointsNo * rotationsNo * 2;
+
   cl_mem diffBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
                                        max(diffBufferSize1, diffBufferSize2) * sizeof(float),
                                        (void*)NULL, &error);
@@ -162,7 +152,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                                           (void*)NULL, &error);
 
   cl_mem argminBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
-                                       (templatePointsNo * rotationsNo) * sizeof(float),
+                                       argminBufferLength * sizeof(float),
                                        (void*)NULL, &error);
 
   cl_mem corrsBuffer = clCreateBuffer(daisyCl->context, CL_MEM_READ_WRITE,
@@ -178,16 +168,14 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                                        (void*) NULL, &error);
   cl_mem petalBuffer;
 
-  int argminBufferLength = templatePointsNo * rotationsNo * 2;
-
   cl_mem pinnedArgminBuffer = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, 
                                              argminBufferLength * sizeof(float), NULL, &error);
 
   if(oclErrorM("oclDaisy","clCreateBuffer (pinnedArgmin)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
-  float * pinnedArgminArray = (float*) clEnqueueMapBuffer(daisyCl->ioqueue, pinnedArgminBuffer, 0,
-                                                          CL_MAP_WRITE, 0, argminBufferLength * sizeof(float),
-                                                          0, NULL, NULL, &error);
+  float * argmin = (float *) clEnqueueMapBuffer(daisyCl->ioqueue, pinnedArgminBuffer, 1,
+                                                CL_MAP_READ, 0, argminBufferLength * sizeof(float),
+                                                0, NULL, NULL, &error);
 
   if(oclErrorM("oclDaisy","clEnqueueMapBuffer (pinnedArgmin)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
@@ -233,6 +221,17 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
   unsigned int offsetToFine = 1 * GRADIENTS_NO;
   unsigned int offsetToDescriptor = (templatePoints[0].y  * daisyTemplate->paddedWidth + 
                                      templatePoints[0].x) * DESCRIPTOR_LENGTH;
+
+  const size_t wgsDiffMiddle[2] = { 128, 1};
+  int targetPixelsPerWorkgroup = 32;
+  int workersPerTargetPixel = wgsDiffMiddle[0] / targetPixelsPerWorkgroup;
+  const size_t wsDiffMiddle[2] = { searchWidthRefined * searchWidthRefined * workersPerTargetPixel, seedTemplatePointsNo };
+
+  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 0, sizeof(templateBuffer), (void*)&templateBuffer);
+  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 1, sizeof(targetBuffer), (void*)&targetBuffer);
+  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 2, sizeof(diffBuffer), (void*)&diffBuffer);
+  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 3, sizeof(corrsBuffer), (void*)&corrsBuffer);
+  clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 4, sizeof(int), (void*)&daisyTarget->paddedWidth);
 
   // Copy first descriptor petals
   error = clEnqueueCopyBuffer(daisyCl->ioqueue, templateBuffer, petalBufferA,
@@ -323,15 +322,12 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                                    &wsoReduceMinAll, &wsReduceMinAll, &wgsReduceMinAll,
                                    0, NULL, (templatePointNo == templatePointsNo-1 ? &lastReduction : NULL));
 
-    error = clFinish(daisyCl->ioqueue);
-
-    if(oclErrorM("oclMatchDaisy","clFinish",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
-
   }
 
   error = clEnqueueReadBuffer(daisyCl->ioqueue, argminBuffer, CL_TRUE,
-                              0, argminBufferLength * sizeof(float), pinnedArgminArray,
+                              0, argminBufferLength * sizeof(float), argmin,
                               1, &lastReduction, NULL);
+
 
   //
   // Process correspondences
@@ -343,13 +339,14 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
   int rotationVotesArg[ROTATIONS_NO * templatePointsNo];
   for(int i = 0; i < rotationsNo; i++)
     rotationVotes[i] = 0;
+
   for(int i = 0; i < templatePointsNo; i++){
 
     int argrot;
     float mind = 9999;
     for(int r = 0; r < rotationsNo; r++){
-      if(pinnedArgminArray[(r+rotationsNo) * templatePointsNo + i] < mind){
-        mind = pinnedArgminArray[(r+rotationsNo) * templatePointsNo + i];
+      if(argmin[(r+rotationsNo) * templatePointsNo + i] < mind){
+        mind = argmin[(r+rotationsNo) * templatePointsNo + i];
         argrot = r;
       }
     }
@@ -365,45 +362,66 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
     }
   }
 
+  printf("VotedRotation %d, rotationVotes %d\n",votedRotation,rotationVotes[votedRotation]);
+
+  point targetSize = { daisyTarget->paddedWidth, daisyTarget->paddedHeight };
+  point templateSize = { daisyTemplate->paddedWidth, daisyTemplate->paddedHeight };
+
   // 2. Get the correspondences that result
   int * templateMatches = rotationVotesArg + votedRotation * templatePointsNo;
   int corrsNo = rotationVotes[votedRotation];
   int * targetMatches = (int*)malloc(sizeof(int) * corrsNo);
-  for(int i = 0; i < corrsNo; i++)
-    targetMatches[i] = (int)pinnedArgminArray[votedRotation * templatePointsNo + templateMatches[i]];
+  for(int i = 0; i < corrsNo; i++){
+//    printf("VotedRotation %d, templateMatch %d, PinnedArgmin %f\n",votedRotation,templateMatches[i],argmin[votedRotation * templatePointsNo + templateMatches[i]]);
+    targetMatches[i] = (int)argmin[votedRotation * templatePointsNo + templateMatches[i]];
+  }
 
   // 3. Estimate object projection
-  for(int i = 0; i < templatePointsNo; i++){
-    templatePoints[i].x = templatePoints[i].x / gridSpacing;
-    templatePoints[i].y = templatePoints[i].y / gridSpacing;
+  for(int i = 0; i < corrsNo; i++){
+    // upsample target points
+    targetMatches[i] = (floor(targetMatches[i] / coarseTargetSize.x) * gridSpacing * targetSize.x)
+                     + (targetMatches[i] % (int)coarseTargetSize.x) * gridSpacing;
+
+//    printf("TargetMatch [%d,%d,%d]\n",targetMatches[i],
+//                        (int)(targetMatches[i] / targetSize.x), 
+//                        (int)(targetMatches[i] % (int)targetSize.x));
+
   }
+
   float * projectionErrors = (float*) malloc(sizeof(float) * corrsNo);
   transform * t = minimise2dProjection(templatePoints, templateMatches, targetMatches, corrsNo,
-                                     coarseTargetSize, coarseTemplateSize, projectionErrors);
+                                       targetSize, templateSize, projectionErrors);
 
   // Filter out some of the correspondences with the projection errors
   float PROJERROR_THRESH = 0.15;
+  int * filteredTemplateMatches = (int*)malloc(sizeof(int) * corrsNo);
   int * filteredMatches = (int*)malloc(sizeof(int) * corrsNo);
   int matchesNo = 0;
   for(int i = 0; i < corrsNo; i++){
-    if(projectionErrors[i] < PROJERROR_THRESH)
+    if(projectionErrors[i] < PROJERROR_THRESH){
+      filteredTemplateMatches[matchesNo] = templateMatches[i];
       filteredMatches[matchesNo++] = targetMatches[i];
+//      printf("Filtered Match [%d,%d] TO [%d,%d]\n", (int)templatePoints[templateMatches[i]].y,(int)templatePoints[templateMatches[i]].x,
+//                                                    (int)(targetMatches[i]/targetSize.x),targetMatches[i]%(int)targetSize.x);
+    }
   }
+
+  printf("Filtered Matches No = %d\n", matchesNo);
 
 //  transform t;
 //  point centre = estimateObjectCentre(templatePoints, templateMatches, targetMatches, corrsNo,
 //                                      coarseTargetSize, coarseTemplateSize, &t);
 
   // 4. Get region of interest
-  point p1 = projectPoint({ 0, 0 }, *t);
-  point p2 = projectPoint({ coarseTemplateSize.x, 0 }, *t);
-  point p3 = projectPoint({ coarseTemplateSize.x, coarseTemplateSize.y }, *t);
-  point p4 = projectPoint({ 0, coarseTemplateSize.y }, *t);
+/*  point p1 = projectPoint({ 0, 0 }, *t);
+  point p2 = projectPoint({ templateSize.x, 0 }, *t);
+  point p3 = projectPoint({ templateSize.x, templateSize.y }, *t);
+  point p4 = projectPoint({ 0, templateSize.y }, *t);
 
   point topLeft = { max(min(min(min(p1.x, p2.x), p3.x), p4.x), 0),
                     max(min(min(min(p1.y, p2.y), p3.y), p4.y), 0)};
-  point bottomRight = { min(max(max(max(p1.x, p2.x), p3.x), p4.x), coarseTargetSize.x-1),
-                        min(max(max(max(p1.y, p2.y), p3.y), p4.y), coarseTargetSize.y-1)};
+  point bottomRight = { min(max(max(max(p1.x, p2.x), p3.x), p4.x), targetSize.x-1),
+                        min(max(max(max(p1.y, p2.y), p3.y), p4.y), targetSize.y-1)};*/
 
   // (pre) 5. Generate seed descriptors (512 of them)
   point * seedTemplatePoints = generateTemplatePoints(daisyTemplate, seedTemplatePointsNo, 0, 0);  
@@ -413,52 +431,63 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
 
   // Get local projection of those 2 target descriptors and re-project seed descriptor
   projectTargetSeeds(seedTemplatePoints, seedTargetPoints, seedTemplatePointsNo,
-                     templatePoints,
-                     filteredMatches, matchesNo, coarseTargetSize, t);
+                     templatePoints, filteredTemplateMatches, 
+                     filteredMatches, matchesNo, targetSize, t);
 
-  printf("Xelloou9\n");
-  // 6. Search for the descriptors in a 32x32 search region with subsample of 2 (so 64x64)
+  // 6. Fill up the corrs buffer with template to target correspondences
+  float * corrs = (float*)malloc(sizeof(float) * seedTemplatePointsNo * 2);
+  point topLeft = {9999,9999};
+  point bottomRight = {0,0};
+  for(int i = 0; i < seedTemplatePointsNo; i++){
 
-  //
-  // !!!
+//    printf("Seed From [%d,%d] To [%d,%d]    ", (int)seedTemplatePoints[i].y, 
+//                                               (int)seedTemplatePoints[i].x, 
+//                                               (int)seedTargetPoints[i].y, 
+//                                               (int)seedTargetPoints[i].x);
 
-//  3 rotations...
+    topLeft = { min(seedTargetPoints[i].x, topLeft.x),
+                min(seedTargetPoints[i].y, topLeft.y)};
+    bottomRight = { max(seedTargetPoints[i].x, bottomRight.x),
+                    max(seedTargetPoints[i].y, bottomRight.y)};
 
-//  search region...
+    corrs[i * 2] = floor(seedTemplatePoints[i].y) * daisyTemplate->paddedWidth + floor(seedTemplatePoints[i].x);
+    corrs[i * 2 + 1] = floor(seedTargetPoints[i].y) * daisyTarget->paddedWidth + floor(seedTargetPoints[i].x);
 
-//  kernel...
+  }
 
-/*kernel void diffMiddle( global   float * tmp,
-                        global   float * trg,
-                        global   float * diff,
-                        global   float * corrs,
-                        const    int     regionNo,
-                        const    int     rotationNo)*/  
+  string fn0 = daisyTarget->filename;
+  string sfx0 = "-corrPoints.bin";
+  string sfx1 = "-matches.bin";
+  saveBinary(corrs, seedTemplatePointsNo * 2, fn0+sfx0);
+  float * arr = (float*)malloc(sizeof(float)*matchesNo);
+  for(int i = 0; i < matchesNo; i++)
+    arr[i] = filteredMatches[i];
+  saveBinary(arr, matchesNo, fn0+sfx1);
+
+  printf("TopLeft = [%d,%d], BottomRight = [%d,%d]\n", (int)topLeft.x, (int)topLeft.y, (int)bottomRight.x, (int)bottomRight.y);
+
+  cl_event corrTransfer;
+
+  clEnqueueWriteBuffer(daisyCl->ioqueue, corrsBuffer, CL_TRUE,
+                       0, seedTemplatePointsNo * 2 * sizeof(float), (void*)corrs,
+                       0, NULL, &corrTransfer);
 
   for(int petalRegionNo = 2; petalRegionNo > -1; petalRegionNo--){
 
     int rotationNo = ((votedRotation-2) + ROTATIONS_NO) % ROTATIONS_NO;
     int regionNo = petalRegionNo;
 
-    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 0, sizeof(templateBuffer), (void*)&templateBuffer);
-    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 1, sizeof(targetBuffer), (void*)&targetBuffer);
-    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 2, sizeof(diffBuffer), (void*)&diffBuffer);
-    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 3, sizeof(corrsBuffer), (void*)&corrsBuffer);
-    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 4, sizeof(int), (void*)&regionNo);
-    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 5, sizeof(int), (void*)&rotationNo);
+    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 5, sizeof(int), (void*)&regionNo);
+    clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 6, sizeof(int), (void*)&rotationNo);
 
     // Compute diffMiddle
-    const size_t wgsDiffMiddle[2] = { 128, 1};
-    int targetPixelsPerWorkgroup = 32;
-    int workersPerTargetPixel = wgsDiffMiddle[0] / targetPixelsPerWorkgroup;
-    const size_t wsDiffMiddle[2] = { searchWidthRefined * searchWidthRefined * workersPerTargetPixel, seedTemplatePointsNo };
 
     printf("\nTotal Workers = [%d,%d], WorkersPerTargetPixel = %d, Workgroup Size = [%d,%d]\n",wsDiffMiddle[0],wsDiffMiddle[1],
                                         workersPerTargetPixel,wgsDiffMiddle[0],wgsDiffMiddle[1]);
 
     error = clEnqueueNDRangeKernel(daisyCl->ioqueue, daisyTemplate->oclKernels->diffMiddle, 2, 
                                    NULL, wsDiffMiddle, wgsDiffMiddle, 
-                                   0, NULL, NULL);
+                                   1, &corrTransfer, NULL);
 
   }
 
@@ -474,7 +503,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
 
   string fn = daisyTarget->filename;
   string sfx = "-coarseArgmin.bin";
-  saveBinary(pinnedArgminArray, argminBufferLength, fn+sfx);
+  saveBinary(argmin, argminBufferLength, fn+sfx);
   sfx = "-templatePoints.bin";
   float * tp = (float*) malloc(sizeof(float) * templatePointsNo);
   for(int i = 0; i < templatePointsNo; i++)

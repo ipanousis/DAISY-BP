@@ -1090,7 +1090,7 @@ kernel void normaliseRotation(global float * data,
 // 512 template points
 //
 //
-#define TEMPLATE_POINTS_NO 256
+#define TEMPLATE_POINTS_NO 512
 #define SEARCH_WIDTH 32
 #define PIXEL_SPACING 2
 #define ROTATIONS_NO_MIDDLE 4
@@ -1112,17 +1112,18 @@ kernel void diffMiddle( global   float * tmp,
                         global   float * trg,
                         global   float * diff,
                         global   float * corrs,
+                        const    int     width,
                         const    int     regionNo,
                         const    int     startRotationNo)
 {
-
-  // ensure corrs values are with spacing=1 !
 
   const int gx = get_global_id(0);
 
   // get template pixel no
   const int templateNo = get_global_id(1);
   const int searchNo = (gx / WGX_MATCH_MIDDLE) * WG_TARGETS_NO;
+  const int searchOffset = ((searchNo / SEARCH_WIDTH) - SEARCH_WIDTH / 2) * width 
+                         + ((searchNo % SEARCH_WIDTH) - SEARCH_WIDTH / 2);
 
   const int lx = get_local_id(0);
 
@@ -1133,12 +1134,13 @@ kernel void diffMiddle( global   float * tmp,
 // FIX IT !!!!!!!!!
 //
 //  const int templateOffset = corrs[templateNo * 2];
-//  const int targetOffset = corrs[templateNo * 2 + 1];
-  const int templateOffset = templateNo;
-  const int targetOffset = templateNo;
+  const int targetOffset = (int)corrs[templateNo * 2 + 1] + searchOffset;
+//  const int templateOffset = templateNo;
+//  const int targetOffset = templateNo;
 
   // fetch template pixel
-  lclTmp[lx] = tmp[templateOffset * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
+  if(lx < 64)
+    lclTmp[lx] = tmp[((int)corrs[templateNo * 2]) * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
 
   int targetStep;
   for(targetStep = 0; targetStep < (WG_TARGETS_NO / TARGETS_PER_LOOP); targetStep++){
@@ -1151,9 +1153,10 @@ kernel void diffMiddle( global   float * tmp,
               (lx / (REGION_PETALS_NO * GRADIENTS_NO)) * LCL_PADDING + lx] =  
 
 
-          trg[(targetOffset + (targetStep * TARGETS_PER_LOOP + i * TARGETS_PER_WG 
-                            + lx / (REGION_PETALS_NO * GRADIENTS_NO)) * PIXEL_SPACING) 
-                            * DESCRIPTOR_LENGTH 
+          trg[targetOffset * DESCRIPTOR_LENGTH 
+                           + (targetStep * TARGETS_PER_LOOP + i * TARGETS_PER_WG 
+                           + lx / (REGION_PETALS_NO * GRADIENTS_NO)) * PIXEL_SPACING 
+                           * DESCRIPTOR_LENGTH 
 
           + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx % (REGION_PETALS_NO * GRADIENTS_NO)];
 

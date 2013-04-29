@@ -1,5 +1,5 @@
 #include "matchHelpers.h"
-#include <stdlib.h>
+#include <stdio.h>
 
 
 transform get2dProjection(point source1, point source2, point target1, point target2){
@@ -14,6 +14,7 @@ transform get2dProjection(point source1, point source2, point target1, point tar
 
   float s;
   if(sbot == 0) s = 1;
+  else if(stop == 0) s = fabs((target1.y-target2.y) / (source1.y-source2.y));
   else s = stop / sbot;
 
   float tx = target1.x - source1.x * s * cos(th) + source1.y * s * sin(th);
@@ -94,7 +95,7 @@ point estimateObjectCentre(point * templatePoints, int * templateMatches, int * 
 }
 
 void projectTargetSeeds(point * seedTemplatePoints, point * seedTargetPoints, int seedsNo,
-                        point * templatePoints,
+                        point * templatePoints, int * templateMatches,
                         int * matches, int matchesNo, point targetSize, transform * t){
 
   for(int s = 0; s < seedsNo; s++){
@@ -105,9 +106,10 @@ void projectTargetSeeds(point * seedTemplatePoints, point * seedTargetPoints, in
     // find 2 closest correspondences in target
     float min1 = 9999;
     float min2 = 9999;
-    int argmin1, argmin2;
+    int argmin1 = -1;
+    int argmin2 = -1;
     for(int t = 0; t < matchesNo; t++){
-      float dist = sqrt(pow(initialSeed.x - (matches[t] % (int)targetSize.x),2) + pow(initialSeed.y - (matches[t] / targetSize.x),2));
+      float dist = sqrt(pow(initialSeed.x - (matches[t] % (int)targetSize.x),2) + pow(initialSeed.y - floor(matches[t] / targetSize.x),2));
       if(dist < min1){
         min2 = min1;
         min1 = dist;
@@ -120,10 +122,13 @@ void projectTargetSeeds(point * seedTemplatePoints, point * seedTargetPoints, in
       }
     }
 
+    if(argmin1 < 0 || argmin2 < 0)
+      printf("HELPPPPPP!\n");
+
     // get projection of the closest points
-    transform localt = get2dProjection(templatePoints[argmin1], templatePoints[argmin2],
-                                      { (matches[argmin1] % (int)targetSize.x), (matches[argmin1] / targetSize.x)},
-                                      { (matches[argmin2] % (int)targetSize.x), (matches[argmin2] / targetSize.x)});
+    transform localt = get2dProjection(templatePoints[templateMatches[argmin1]], templatePoints[templateMatches[argmin2]],
+                                      { (matches[argmin1] % (int)targetSize.x), floor(matches[argmin1] / targetSize.x)},
+                                      { (matches[argmin2] % (int)targetSize.x), floor(matches[argmin2] / targetSize.x)});
 
     // re-project template seed
     seedTargetPoints[s] = projectPoint(seedTemplatePoints[s], localt);
@@ -140,50 +145,42 @@ point projectPoint(point p, transform t){
 }
 
 transform * minimise2dProjection(point * templatePoints, int * templateMatches, int * targetMatches, int corrsNo,
-                               point targetSize, point templateSize, float * projectionErrors){
+                                 point targetSize, point templateSize, float * projectionErrors){
 
   float minErrorSum = 9999;
-  float * otherProjectionErrors = (float*) malloc(sizeof(float) * corrsNo);
-  float * minErrors;
-  float * curErrors = otherProjectionErrors;
+  float * errors = (float*) malloc(sizeof(float) * corrsNo);
   transform * minTransform = (transform*)malloc(sizeof(transform));
 
   // for every pair of correspondences in the templateMatches/targetMatches set
   for(int c1 = 0; c1 < corrsNo; c1++){
 
     point source1 = templatePoints[templateMatches[c1]];
-    point target1 = { targetMatches[c1] % (int)targetSize.x, targetMatches[c1] / targetSize.x };
+    point target1 = { targetMatches[c1] % (int)targetSize.x, floor(targetMatches[c1] / targetSize.x) };
 
     for(int c2 = 0; c2 < corrsNo; c2++){
 
       point source2 = templatePoints[templateMatches[c2]];
-      point target2 = { targetMatches[c2] % (int)targetSize.x, targetMatches[c2] / targetSize.x };
+      point target2 = { targetMatches[c2] % (int)targetSize.x, floor(targetMatches[c2] / targetSize.x) };
       // compute 2d projection
       transform trans = get2dProjection(source1, source2, target1, target2);
       // measure errors
       float errorSum = 0;
       for(int c = 0; c < corrsNo; c++){
         point p = projectPoint(templatePoints[templateMatches[c]], trans);
-        curErrors[c] =   sqrt(pow(targetMatches[c] % (int)targetSize.x - p.x,2)+pow(targetMatches[c] / targetSize.x - p.y,2))
+        errors[c] =   sqrt(pow(targetMatches[c] % (int)targetSize.x - p.x,2)+pow(floor(targetMatches[c] / targetSize.x) - p.y,2))
                        / sqrt(pow(targetMatches[c] % (int)targetSize.x - templatePoints[templateMatches[c]].x,2)
-                            + pow(targetMatches[c] / targetSize.x - templatePoints[templateMatches[c]].y,2));
-        errorSum += curErrors[c];
+                            + pow(floor(targetMatches[c] / targetSize.x) - templatePoints[templateMatches[c]].y,2));
+        errorSum += errors[c];
       }
       
       if(errorSum < minErrorSum){
 
-        errorSum = minErrorSum;
-        minErrors = curErrors;
-        curErrors = (curErrors == projectionErrors ? otherProjectionErrors : projectionErrors);
+        minErrorSum = errorSum;
         *minTransform = trans;
+        memcpy(projectionErrors, errors, corrsNo * sizeof(float));
 
       }
     }
-  }
-
-  if(curErrors == otherProjectionErrors){
-    for(int c = 0; c < corrsNo; c++)
-      projectionErrors[c] = curErrors[c];
   }
 
   return minTransform;
