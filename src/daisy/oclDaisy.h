@@ -122,6 +122,18 @@ typedef struct time_params_tag{
 
   struct timeval startFetchDaisy, endFetchDaisy; // time to fetch a daisy descriptor from global to local memory on the gpu
 
+  struct timeval startMatchDaisy, endMatchDaisy; // time for coarse and middle layer matching
+
+  struct timeval startDiffCoarse, endDiffCoarse; // time to do 1 to all diff at coarse spacing, for all 3 petal regions
+
+  struct timeval startDiffTranspose, endDiffTranspose; // time to transpose diff rotations
+
+  struct timeval startReduceCoarse1, endReduceCoarse1; // time to do the first reduce kernel (once per rotation)
+
+  struct timeval startReduceCoarse2, endReduceCoarse2; // time to run the final reduce kernel (once for all rotations)
+
+  struct timeval startDiffMiddle, endDiffMiddle; // time to do middle layer diffs of many points in local regions with middle spacing, for all 3 petal regions
+
   double transPinned, transRam;
 
   double startt, endt, difft;

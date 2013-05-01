@@ -176,7 +176,10 @@ int initOcl(daisy_params * daisy, ocl_constructs * daisyCl){
   if(oclError("initOcl","buildCachedConstructs",error)) return oclCleanUp(daisy->oclKernels,daisyCl,error);
 
   // Pass preprocessor build options
-  const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math -DFSC=14";
+//  const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math -DFSC=14";    
+  char * options = (char*) malloc(sizeof(char) * 500);
+  sprintf(options, "-cl-mad-enable -cl-fast-relaxed-math -DWGX_MATCH_MIDDLE=%d -DWG_TARGETS_NO=%d -DTARGETS_PER_LOOP=%d", 
+                     WGX_MATCH_MIDDLE, WG_TARGETS_NO, TARGETS_PER_LOOP);
 
   // Build denoising filter
   error = buildCachedProgram(daisyCl, "daisyKernels.cl", options);

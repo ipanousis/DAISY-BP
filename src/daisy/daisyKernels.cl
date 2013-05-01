@@ -736,13 +736,13 @@ kernel void fetchDaisy(global float * array)
 
 #define ROTATIONS_NO 8
 
-#define TMP_PETALS_NO 8
-#define TRG_PIXELS_NO 4
-#define TRG_PER_LOOP 2
-#define WGX_MATCH_COARSE 64
-#define SUBSAMPLE 4
+#define DC_TMP_PETALS_NO 8
+#define DC_TRG_PIXELS_NO 4
+#define DC_TRG_PER_LOOP 2
+#define DC_WGX 64
+#define DC_PX_SPACING 4
 
-#define DIFFS ((TRG_PER_LOOP * TMP_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO) / WGX_MATCH_COARSE)
+#define DIFFSC ((DC_TRG_PER_LOOP * DC_TMP_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO) / DC_WGX)
 
 kernel void diffCoarse( global   float * tmp,
                         global   float * trg,
@@ -752,7 +752,7 @@ kernel void diffCoarse( global   float * tmp,
 {
 
   local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO];
-  local float lclTrg[TRG_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO + 1];
+  local float lclTrg[DC_TRG_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO + 1];
 
   const int lid = get_local_id(0);
   const int gx = get_global_id(0);
@@ -762,16 +762,16 @@ kernel void diffCoarse( global   float * tmp,
   lclTmp[lid] = tmp[regionNo * REGION_PETALS_NO * GRADIENTS_NO + lid];
 
   int targetStep;
-  for(targetStep = 0; targetStep < TRG_PIXELS_NO / TRG_PER_LOOP; targetStep++){
+  for(targetStep = 0; targetStep < DC_TRG_PIXELS_NO / DC_TRG_PER_LOOP; targetStep++){
 
     // fetch target pixels to local memory; GRADIENTS_NO x REGION_PETALS_NO x TRG_PER_LOOP
     int i;
-    for(i = 0; i < TRG_PER_LOOP; i++){
+    for(i = 0; i < DC_TRG_PER_LOOP; i++){
 
-      lclTrg[i * (WGX_MATCH_COARSE+1) + lid] = 
+      lclTrg[i * (DC_WGX+1) + lid] = 
 
-        trg[((gy * SUBSAMPLE + (SUBSAMPLE / 2 -1)) * width + ((gx / WGX_MATCH_COARSE) * TRG_PIXELS_NO + targetStep * TRG_PER_LOOP + i) * 
-             SUBSAMPLE + (SUBSAMPLE / 2 -1)) * DESCRIPTOR_LENGTH + 
+        trg[((gy * DC_PX_SPACING + (DC_PX_SPACING / 2 -1)) * width + ((gx / DC_WGX) * DC_TRG_PIXELS_NO + targetStep * DC_TRG_PER_LOOP + i) * 
+             DC_PX_SPACING + (DC_PX_SPACING / 2 -1)) * DESCRIPTOR_LENGTH + 
              (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lid];
 
     }
@@ -781,12 +781,12 @@ kernel void diffCoarse( global   float * tmp,
     // do 4 diffs and sum them
     float diffs = 0.0;
     
-    for(i = 0; i < DIFFS; i++){
+    for(i = 0; i < DIFFSC; i++){
 
       // first 32 threads do diffs for the first pixel, others for the second pixel
       // first 4 threads do diffs for rotation 0, next 4 threads rotation 1....
-      const int pixelNo = lid / (WGX_MATCH_COARSE / TRG_PER_LOOP);
-      const int rotationNo = (lid / (WGX_MATCH_COARSE / (TRG_PER_LOOP * ROTATIONS_NO))) % ROTATIONS_NO; 
+      const int pixelNo = lid / (DC_WGX / DC_TRG_PER_LOOP);
+      const int rotationNo = (lid / (DC_WGX / (DC_TRG_PER_LOOP * ROTATIONS_NO))) % ROTATIONS_NO; 
 
       const int petalNo = (lid % 4) * 2; // first template petal
 
@@ -810,23 +810,23 @@ kernel void diffCoarse( global   float * tmp,
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // the first 32 threads sum half of the 64 values
-    if(lid < WGX_MATCH_COARSE / 2)
+    if(lid < DC_WGX / 2)
       lclTrg[lid * 2] = lclTrg[lid * 2] + 
                         lclTrg[lid * 2 + 1];
 
 
     // the first 16 threads sum the half of half
-    if(lid < WGX_MATCH_COARSE / 4){
+    if(lid < DC_WGX / 4){
 
       diffs = lclTrg[lid * 4] + lclTrg[lid * 4 + 2];
 
       // first 16 fetch and write to global
-      out[(gy * (width / SUBSAMPLE) + gx / (WGX_MATCH_COARSE / TRG_PIXELS_NO) + targetStep * TRG_PER_LOOP) * 
+      out[(gy * (width / DC_PX_SPACING) + gx / (DC_WGX / DC_TRG_PIXELS_NO) + targetStep * DC_TRG_PER_LOOP) * 
               ROTATIONS_NO + lid] = 
 
           (regionNo < 2 ? 
 
-              out[(gy * (width / SUBSAMPLE) + gx / (WGX_MATCH_COARSE / TRG_PIXELS_NO) + targetStep * TRG_PER_LOOP) * ROTATIONS_NO + lid]
+              out[(gy * (width / DC_PX_SPACING) + gx / (DC_WGX / DC_TRG_PIXELS_NO) + targetStep * DC_TRG_PER_LOOP) * ROTATIONS_NO + lid]
                 
                   : 0) + diffs;
 
@@ -1091,18 +1091,23 @@ kernel void normaliseRotation(global float * data,
 //
 //
 //#define TEMPLATE_POINTS_NO 512 * N
+//#define SEARCH_WIDTH 32
 #define SEARCH_WIDTH 32
 #define PIXEL_SPACING 1
 #define ROTATIONS_NO_MIDDLE 4
+//#define ROTATIONS_NO_MIDDLE 1
 
 // OPTIMAL: WGX = 128, WG_TARGETS_NO = 32, TARGETS_PER_LOOP = 8
-#define WGX_MATCH_MIDDLE 128
-#define WG_TARGETS_NO 32
+//#define WGX_MATCH_MIDDLE 128
+//#define WG_TARGETS_NO 32
+//#define WG_TARGETS_NO 16
 #define WORKERS_PER_TEMPLATE ((SEARCH_WIDTH * SEARCH_WIDTH) / WG_TARGETS_NO) * WGX_MATCH_MIDDLE
-#define TARGETS_PER_LOOP 8
+//#define TARGETS_PER_LOOP 8
+//#define TARGETS_PER_LOOP 16
 #define TARGETS_PER_WG (WGX_MATCH_MIDDLE / (REGION_PETALS_NO * GRADIENTS_NO))
 #define DIFFSM (TARGETS_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO_MIDDLE) / WGX_MATCH_MIDDLE
 #define LCL_PADDING 2
+#define OUTPUT (TARGETS_PER_LOOP * ROTATIONS_NO_MIDDLE)
 
 // tmp - get template descriptors from
 // trg - get target descriptors from
@@ -1132,19 +1137,21 @@ kernel void diffMiddle( global   float * tmp,
 
   const int targetOffset = (int)corrs[templateNo * 2 + 1] + searchOffset;
 
-  const int pixelNo = lx / (WGX_MATCH_MIDDLE / TARGETS_PER_LOOP);
-  const int rotNo = (lx / (WGX_MATCH_MIDDLE / (TARGETS_PER_LOOP * ROTATIONS_NO_MIDDLE))) % ROTATIONS_NO_MIDDLE;
+  const int rotNo = ((lx * (TARGETS_PER_LOOP * ROTATIONS_NO_MIDDLE)) / WGX_MATCH_MIDDLE) % ROTATIONS_NO_MIDDLE;
 
   // fetch template pixel
-  if(lx < 64)
+  if(lx < 64){
     lclTmp[lx] = tmp[((int)corrs[templateNo * 2]) * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
+    if(WGX_MATCH_MIDDLE == 32)
+      lclTmp[lx+32] = tmp[((int)corrs[templateNo * 2]) * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx + 32];
+  }
 
   int targetStep;
   for(targetStep = 0; targetStep < (WG_TARGETS_NO / TARGETS_PER_LOOP); targetStep++){
 
     int i;
     // fetch TARGETS_PER_LOOP target pixels to lclTrg; GRADIENTS_NO x REGION_PETALS_NO x TARGETS_PER_LOOP
-    for(i = 0; i < TARGETS_PER_LOOP / (WGX_MATCH_MIDDLE / (REGION_PETALS_NO * GRADIENTS_NO)); i++){
+    for(i = 0; i < (TARGETS_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO)) / WGX_MATCH_MIDDLE; i++){
 
       lclTrg[i * (WGX_MATCH_MIDDLE + LCL_PADDING * TARGETS_PER_WG) + 
               (lx / (REGION_PETALS_NO * GRADIENTS_NO)) * LCL_PADDING + lx] =  
@@ -1157,23 +1164,34 @@ kernel void diffMiddle( global   float * tmp,
 
           + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx % (REGION_PETALS_NO * GRADIENTS_NO)];
 
-
     }
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // do 4 rotation diffs
     float diffs = 0.0;
+    const int pixelNo = (lx * TARGETS_PER_LOOP) / WGX_MATCH_MIDDLE;
     const int rotationNo = (startRotationNo + rotNo) % ROTATIONS_NO;
     
     for(i = 0; i < DIFFSM; i++){
 
 
       // IF WORKERS PER PETAL CHANGE THEN CHANGE THIS
-      //      const int petalNo = (lx / 1) % REGION_PETALS_NO; // first template petal
-      const int petalNo = (lx % 4) * 2;
-      //      const int petalNo = (lx % 2) * 4;
-      //      const int petalNo = 0; // with trgperloop 4
+#if DIFFSM == 1
+      const int petalNo = (lx / 8) % REGION_PETALS_NO;  // for 64 workers per rotation
+#elif DIFFSM == 2
+      const int petalNo = (lx / 4) % REGION_PETALS_NO;  // for 32 workers per rotation
+#elif DIFFSM == 4
+      const int petalNo = (lx / 2) % REGION_PETALS_NO;  // for 16 workers per rotation
+#elif DIFFSM == 8
+      const int petalNo = lx % REGION_PETALS_NO;        // for 8 workers per rotation
+#elif DIFFSM == 16
+      const int petalNo = (lx % 4) * 2;                 // for 4 workers per rotation
+#elif DIFFSM == 32
+      const int petalNo = (lx % 2) * 4;                 // for 2 workers per rotation
+#elif DIFFSM == 64
+      const int petalNo = 0;                            // for 1 worker per rotation
+#endif
 
       // get these by rotationNo and lid
       const int trgPetal = (petalNo + rotationNo) % REGION_PETALS_NO;
@@ -1199,7 +1217,7 @@ kernel void diffMiddle( global   float * tmp,
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // the first 32 threads sum 64 to 32
-    if(lx < WGX_MATCH_MIDDLE / 2){
+    if(lx < WGX_MATCH_MIDDLE / 2 && OUTPUT <= WGX_MATCH_MIDDLE / 2){
 
       lclTrg[lx * 2] = lclTrg[lx * 2] + 
                        lclTrg[lx * 2 + 1];
@@ -1208,9 +1226,41 @@ kernel void diffMiddle( global   float * tmp,
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    if(lx < WGX_MATCH_MIDDLE / 4){
+    if(lx < WGX_MATCH_MIDDLE / 4 && OUTPUT <= WGX_MATCH_MIDDLE / 4){
 
-      diffs = lclTrg[lx * 4] + lclTrg[lx * 4 + 2];
+      lclTrg[lx * 4] = lclTrg[lx * 4] + lclTrg[lx * 4 + 2];
+
+    }
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+
+    if(lx < WGX_MATCH_MIDDLE / 8 && OUTPUT <= WGX_MATCH_MIDDLE / 8){
+
+      lclTrg[lx * 8] = lclTrg[lx * 8] + lclTrg[lx * 8 + 4];
+
+    }
+
+    if(lx < WGX_MATCH_MIDDLE / 16 && OUTPUT <= WGX_MATCH_MIDDLE / 16){
+
+      lclTrg[lx * 16] = lclTrg[lx * 16] + lclTrg[lx * 16 + 8];
+
+    }
+
+    if(lx < WGX_MATCH_MIDDLE / 32 && OUTPUT <= WGX_MATCH_MIDDLE / 32){
+
+      lclTrg[lx * 32] = lclTrg[lx * 32] + lclTrg[lx * 32 + 16];
+
+    }
+
+    if(lx < WGX_MATCH_MIDDLE / 64 && OUTPUT <= WGX_MATCH_MIDDLE / 64){
+
+      lclTrg[lx * 64] = lclTrg[lx * 64] + lclTrg[lx * 64 + 32];
+
+    }
+//      diffs = lclTrg[lx * 8] + lclTrg[lx * 8 + 4];
+//      diffs = lclTrg[lx * 4] + lclTrg[lx * 4 + 2];
+
+    if(lx < OUTPUT){
 
       // first 16 fetch and write to global
       diff[templateNo * (SEARCH_WIDTH * SEARCH_WIDTH * ROTATIONS_NO_MIDDLE) + (searchNo + targetStep * TARGETS_PER_LOOP) 
@@ -1221,7 +1271,7 @@ kernel void diffMiddle( global   float * tmp,
               diff[templateNo * (SEARCH_WIDTH * SEARCH_WIDTH * ROTATIONS_NO_MIDDLE) + (searchNo + targetStep * TARGETS_PER_LOOP) 
                               * ROTATIONS_NO_MIDDLE + lx]
                 
-                  : 0) + diffs;
+                  : 0) + lclTrg[lx * (WGX_MATCH_MIDDLE / OUTPUT)];
 
     }
 

@@ -21,6 +21,7 @@ void writeInfofile(daisy_params * daisy, char * binaryfile);
 void profileSpeed(short int cpuTransfer);
 void runDaisy(char * filename, short int saveBinary);
 void runMatcher(char * f1, char * f2);
+void runMatchProfile();
 
 int main( int argc, char **argv  )
 {
@@ -43,7 +44,7 @@ int main( int argc, char **argv  )
     runDaisy(filename,saveBinary);
 
   }
-  else if(argc > counter && !strcmp("-profile", argv[counter])){
+  else if(argc > counter && !strcmp("-profileDaisy", argv[counter])){
 
     // do the profiling across a range of inputs from 128x128 to 1536x1536
 
@@ -65,8 +66,15 @@ int main( int argc, char **argv  )
     runMatcher(filename1,filename2);
 
   }
+  else if(argc > counter && !strcmp("-profileMatch", argv[counter])){
+
+    counter++;
+
+    runMatchProfile();
+
+  }
   else{
-    fprintf(stderr,"Pass image filename with argument -i <file>, or profile with -profile\n");
+    fprintf(stderr,"Pass image filename with argument -i <file>, profile DAISY extraction with -profileDaisy, profile DAISY matching with -profileMatch\n");
     return 1;
   }
 
@@ -98,6 +106,102 @@ void runMatcher(char * f1, char * f2){
 
   daisyCleanUp(daisyTemplate,daisyCl);
   daisyCleanUp(daisyTarget,daisyCl);
+
+}
+
+void runMatchProfile(){
+
+  time_params * times = (time_params*) malloc(sizeof(time_params));
+  times->measureDeviceHostTransfers = 0;
+  times->transPinned = 0;
+  times->transRam = 0;
+  times->displayRuntimes = 1;
+
+  ocl_constructs * daisyCl = newOclConstructs(0,0,0);
+
+  daisy_params * daisyTemplate = initDaisy("test-data/fifa-template.jpg",0);
+  daisy_params * daisyTarget = initDaisy("test-data/obj-frames/resized/frame-0200.png",0);
+
+  initOcl(daisyTemplate, daisyCl);
+  initOclMatch(daisyTemplate,daisyCl);
+
+  daisyTarget->oclKernels = daisyTemplate->oclKernels;
+
+  oclDaisy(daisyTemplate, daisyCl, times);
+  oclDaisy(daisyTarget, daisyCl, times);
+
+  int iterations = 10;
+
+  double t_match = 0;
+  double t_diffc = 0;
+  double t_trans = 0;
+  double t_reduce1 = 0;
+  double t_reduce2 = 0;
+  double t_diffm = 0;
+  double success = 0;
+  double * matchTimes = (double*) malloc(sizeof(double) * iterations);
+
+  for(int i = 0; i < iterations; i++){
+
+    success += oclMatchDaisy(daisyTemplate, daisyTarget, daisyCl, times);
+
+    // Add up the times
+    matchTimes[i] = timeDiff(times->startMatchDaisy, times->endMatchDaisy);
+    t_diffc += timeDiff(times->startDiffCoarse, times->endDiffCoarse);
+    t_trans += timeDiff(times->startDiffTranspose, times->endDiffTranspose);
+    t_reduce1 += timeDiff(times->startReduceCoarse1, times->endReduceCoarse1);
+    t_reduce2 += timeDiff(times->startReduceCoarse2, times->endReduceCoarse2);
+    t_diffm += timeDiff(times->startDiffMiddle, times->endDiffMiddle);
+
+    t_match += matchTimes[i];
+
+  }
+
+  t_match /= iterations;
+  t_diffc /= iterations;
+  t_trans /= iterations;
+  t_reduce1 /= iterations;
+  t_reduce2 /= iterations;
+  t_diffm /= iterations;
+  success /= iterations;
+
+  // Append to an output file
+  struct tm * sysTime = NULL;                     
+
+  time_t timeVal = 0;                            
+  timeVal = time(NULL);                          
+  sysTime = localtime(&timeVal);
+
+  char * csvOutName = (char*)malloc(sizeof(char) * 200);
+  char * nameTemplate = (char*)malloc(sizeof(char) * 100);
+
+  strcpy(nameTemplate,"gdaisy-match-speeds-%02d%02d.csv");
+
+  sprintf(csvOutName, nameTemplate, sysTime->tm_mon+1, sysTime->tm_mday);//, sysTime->tm_hour, sysTime->tm_min);
+
+  short int newFile = (access(csvOutName, F_OK) == -1);
+
+  FILE * csvOut = fopen(csvOutName,"a+");
+
+  if(newFile)
+    fprintf(csvOut,"templateH,templateW,targetH,targetW,WGX,WGTRGS,TRGPL,diffCoarse,diffTrans,\
+reduceCoarse1,reduceCoarse2,diffMiddle,daisyMatch,daisyMatchStd,iterations,success\n");
+
+  const char * templateRow = "%d,%d,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%.2f\n";
+
+  double t_matchstd = getStd(matchTimes,iterations);
+
+  fprintf(csvOut, templateRow,
+                  daisyTemplate->paddedHeight, daisyTemplate->paddedWidth,
+                  daisyTarget->paddedHeight, daisyTarget->paddedWidth,
+                  WGX_MATCH_MIDDLE, WG_TARGETS_NO, TARGETS_PER_LOOP, t_diffc, t_trans, t_reduce1, t_reduce2, t_diffm, t_match, t_matchstd,
+                  iterations, success);
+
+  // Run measurements across image size, search widths, rotations no
+
+  daisyCleanUp(daisyTemplate,daisyCl);
+  daisyCleanUp(daisyTarget,daisyCl);
+
 
 }
 
