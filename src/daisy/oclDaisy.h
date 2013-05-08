@@ -134,6 +134,8 @@ typedef struct time_params_tag{
 
   struct timeval startDiffMiddle, endDiffMiddle; // time to do middle layer diffs of many points in local regions with middle spacing, for all 3 petal regions
 
+  struct timeval startMatchCpu, endMatchCpu;
+
   double transPinned, transRam;
 
   double startt, endt, difft;
@@ -142,11 +144,13 @@ typedef struct time_params_tag{
 
   short int displayRuntimes;
 
+  short int enabled;
+
 } time_params;
 
-daisy_params * newDaisyParams(char *, unsigned char *, int, int, short int);
+daisy_params * newDaisyParams(const char *, unsigned char *, int, int, short int);
 
-daisy_params * initDaisy(char *, short int);
+daisy_params * initDaisy(const char *, short int);
 
 int initOcl(daisy_params *, ocl_constructs *);
 

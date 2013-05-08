@@ -45,11 +45,12 @@ long int verifyTransposeDaisyPairs(daisy_params * daisy, float * transArray, flo
 
 #define DESCRIPTOR_LENGTH (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO
 
-daisy_params * newDaisyParams(char * filename, unsigned char* array, int height, int width,
+daisy_params * newDaisyParams(const char * filename, unsigned char* array, int height, int width,
                               short int cpuTransfer){
 
   daisy_params * params = (daisy_params*) malloc(sizeof(daisy_params));
-  params->filename = filename;
+  params->filename = (char*) malloc(sizeof(char) * 500);
+  strcpy(params->filename,filename);
   params->array = array;
   params->height = height;
   params->width = width;
@@ -146,7 +147,7 @@ int oclCleanUp(ocl_daisy_kernels * daisy, ocl_constructs * daisyCl, int error){
 
 }
 
-daisy_params * initDaisy(char * filename, short int saveBinary){
+daisy_params * initDaisy(const char * filename, short int saveBinary){
 
   unsigned char * srcArray = NULL;
   int height, width;
@@ -178,8 +179,8 @@ int initOcl(daisy_params * daisy, ocl_constructs * daisyCl){
   // Pass preprocessor build options
 //  const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math -DFSC=14";    
   char * options = (char*) malloc(sizeof(char) * 500);
-  sprintf(options, "-cl-mad-enable -cl-fast-relaxed-math -DWGX_MATCH_MIDDLE=%d -DWG_TARGETS_NO=%d -DTARGETS_PER_LOOP=%d", 
-                     WGX_MATCH_MIDDLE, WG_TARGETS_NO, TARGETS_PER_LOOP);
+  sprintf(options, "-cl-mad-enable -cl-fast-relaxed-math -DWGX_MATCH_MIDDLE=%d -DWG_TARGETS_NO=%d -DTARGETS_PER_LOOP=%d -DSEARCH_WIDTH=%d -DROTATIONS_NO_MIDDLE=%d", 
+                     WGX_MATCH_MIDDLE, WG_TARGETS_NO, TARGETS_PER_LOOP, MIDDLE_SEARCH_WIDTH, MIDDLE_ROTATIONS_NO);
 
   // Build denoising filter
   error = buildCachedProgram(daisyCl, "daisyKernels.cl", options);
@@ -337,7 +338,7 @@ int oclDaisy(daisy_params * daisy, ocl_constructs * daisyCl, time_params * times
   // DAISY to CPU transfer setup
   //
   void * daisyDescriptorsSection;
-  cl_mem hostPinnedDaisyDescriptors;
+  cl_mem hostPinnedDaisyDescriptors = NULL;
   if(daisy->cpuTransfer){
 
     hostPinnedDaisyDescriptors = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, 
@@ -1171,7 +1172,6 @@ void testFetchDaisy(daisy_params * daisy, ocl_constructs * daisyCl, cl_mem daisy
   //
   // Test DAISY fetch speed
   //
-  cl_int error;
 
   int rangeStart = FETCH_RANGE_START;
   int rangeEnd = FETCH_RANGE_START;
@@ -1192,9 +1192,9 @@ void testFetchDaisy(daisy_params * daisy, ocl_constructs * daisyCl, cl_mem daisy
 
     clSetKernelArg(daisy->oclKernels->fetchd, 0, sizeof(cl_mem), (void*)&daisyBufferA);
     gettimeofday(&times->startFetchDaisy,NULL);
-    error = clEnqueueNDRangeKernel(daisyCl->ooqueue, daisy->oclKernels->fetchd, 1,
-                                   fetchWorkerOffsets, fetchWorkerSize, fetchGroupSize,
-                                   0, NULL, NULL);
+    clEnqueueNDRangeKernel(daisyCl->ooqueue, daisy->oclKernels->fetchd, 1,
+                           fetchWorkerOffsets, fetchWorkerSize, fetchGroupSize,
+                           0, NULL, NULL);
 
     clFinish(daisyCl->ooqueue);
     gettimeofday(&times->endFetchDaisy,NULL);
@@ -1211,9 +1211,9 @@ void testFetchDaisy(daisy_params * daisy, ocl_constructs * daisyCl, cl_mem daisy
 
       gettimeofday(&times->startFetchDaisy,NULL);
 
-      error = clEnqueueNDRangeKernel(daisyCl->ooqueue, daisy->oclKernels->fetchd, 1,
-                                     fetchWorkerOffsets, fetchWorkerSize, fetchGroupSize,
-                                     0, NULL, NULL);
+      clEnqueueNDRangeKernel(daisyCl->ooqueue, daisy->oclKernels->fetchd, 1,
+                             fetchWorkerOffsets, fetchWorkerSize, fetchGroupSize,
+                             0, NULL, NULL);
 
       clFinish(daisyCl->ooqueue);
       gettimeofday(&times->endFetchDaisy,NULL);
@@ -1265,7 +1265,7 @@ long int verifyTransposeDaisyPairs(daisy_params * daisy, float * transArray, flo
 
   }
 
-  printf("Petal issues: %d\n",petalIssues);
+  printf("Petal issues: %ld\n",petalIssues);
 
   for(int petalNo = 1; petalNo < daisy->regionPetalsNo * daisy->smoothingsNo; petalNo+=2){
     petalIssues = 0;
@@ -1355,7 +1355,7 @@ long int verifyTransposeDaisyPairs(daisy_params * daisy, float * transArray, flo
 
     }
 
-    printf("Petal issues: %d\n",petalIssues);
+    printf("Petal issues: %ld\n",petalIssues);
 
   }
 

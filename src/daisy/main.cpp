@@ -88,6 +88,7 @@ void runMatcher(char * f1, char * f2){
   times->transPinned = 0;
   times->transRam = 0;
   times->displayRuntimes = 1;
+  times->enabled = 0;
 
   ocl_constructs * daisyCl = newOclConstructs(0,0,0);
 
@@ -116,11 +117,15 @@ void runMatchProfile(){
   times->transPinned = 0;
   times->transRam = 0;
   times->displayRuntimes = 1;
+  times->enabled = 1;
 
   ocl_constructs * daisyCl = newOclConstructs(0,0,0);
 
-  daisy_params * daisyTemplate = initDaisy("test-data/fifa-template.jpg",0);
-  daisy_params * daisyTarget = initDaisy("test-data/obj-frames/resized/frame-0200.png",0);
+  string tempName = "test-data/fifa-template.jpg";
+  string targName = "test-data/obj-frames/resized/frame-0200.png";
+
+  daisy_params * daisyTemplate = initDaisy(tempName.c_str(),0);
+  daisy_params * daisyTarget = initDaisy(targName.c_str(),0);
 
   initOcl(daisyTemplate, daisyCl);
   initOclMatch(daisyTemplate,daisyCl);
@@ -138,12 +143,20 @@ void runMatchProfile(){
   double t_reduce1 = 0;
   double t_reduce2 = 0;
   double t_diffm = 0;
+  double t_matchcpu = 0;
   double success = 0;
   double * matchTimes = (double*) malloc(sizeof(double) * iterations);
+  double * matchTimesCpu = (double*) malloc(sizeof(double) * iterations);
+  int n = 0;
 
   for(int i = 0; i < iterations; i++){
 
     success += oclMatchDaisy(daisyTemplate, daisyTarget, daisyCl, times);
+
+    if(success != 0)
+      continue;
+
+    n++;
 
     // Add up the times
     matchTimes[i] = timeDiff(times->startMatchDaisy, times->endMatchDaisy);
@@ -152,17 +165,20 @@ void runMatchProfile(){
     t_reduce1 += timeDiff(times->startReduceCoarse1, times->endReduceCoarse1);
     t_reduce2 += timeDiff(times->startReduceCoarse2, times->endReduceCoarse2);
     t_diffm += timeDiff(times->startDiffMiddle, times->endDiffMiddle);
+    matchTimesCpu[i] = timeDiff(times->startMatchCpu, times->endMatchCpu);
 
     t_match += matchTimes[i];
+    t_matchcpu += matchTimesCpu[i];
 
   }
 
-  t_match /= iterations;
-  t_diffc /= iterations;
-  t_trans /= iterations;
-  t_reduce1 /= iterations;
-  t_reduce2 /= iterations;
-  t_diffm /= iterations;
+  t_match /= n;
+  t_diffc /= n;
+  t_trans /= n;
+  t_reduce1 /= n;
+  t_reduce2 /= n;
+  t_diffm /= n;
+  t_matchcpu /= n;
   success /= iterations;
 
   // Append to an output file
@@ -184,17 +200,20 @@ void runMatchProfile(){
   FILE * csvOut = fopen(csvOutName,"a+");
 
   if(newFile)
-    fprintf(csvOut,"templateH,templateW,targetH,targetW,WGX,WGTRGS,TRGPL,diffCoarse,diffTrans,\
-reduceCoarse1,reduceCoarse2,diffMiddle,daisyMatch,daisyMatchStd,iterations,success\n");
+    fprintf(csvOut,"templateH,templateW,targetH,targetW,MIDDLETEMPS,WGX,WGTRGS,TRGPL,diffCoarse,diffTrans,\
+reduceCoarse1,reduceCoarse2,diffMiddle,daisyMatch,daisyMatchStd,daisyMatchCpu,iterations,success\n");
 
-  const char * templateRow = "%d,%d,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%.2f\n";
+  const char * templateRow = "%d,%d,%d,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%.2f\n";
 
-  double t_matchstd = getStd(matchTimes,iterations);
+  double t_matchstd = getStd(matchTimes,n);
+  double t_matchcpustd = getStd(matchTimesCpu,n);
 
   fprintf(csvOut, templateRow,
                   daisyTemplate->paddedHeight, daisyTemplate->paddedWidth,
                   daisyTarget->paddedHeight, daisyTarget->paddedWidth,
+                  MIDDLE_TEMPLATES_NO, 
                   WGX_MATCH_MIDDLE, WG_TARGETS_NO, TARGETS_PER_LOOP, t_diffc, t_trans, t_reduce1, t_reduce2, t_diffm, t_match, t_matchstd,
+                  t_matchcpu, t_matchcpustd,
                   iterations, success);
 
   // Run measurements across image size, search widths, rotations no
