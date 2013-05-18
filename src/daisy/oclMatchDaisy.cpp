@@ -9,7 +9,7 @@ long int verifyTransposeRotations(daisy_params * daisyTarget, float * diffArray,
 long int verifyDiffMiddle(daisy_params * daisyTarget, daisy_params * daisyTemplate, float * targetArray, 
                           float * templateArray, float * diffArray, int searchWidth, float * corrs, int votedRotation,
                           int templatesNo, int rotationsNoMiddle);
-void checkpoint(ocl_constructs * daisyCl, struct timeval * s, short int finishQueue);
+int checkpoint(ocl_constructs * daisyCl, struct timeval * s, short int finishQueue);
 
 int oclErrorM(const char * function, const char * functionCall, int error){
 
@@ -36,8 +36,8 @@ int initOclMatch(daisy_params * daisy, ocl_constructs * daisyCl){
 
     // Pass preprocessor build options
     char * options = (char*) malloc(sizeof(char) * 200);
-    sprintf(options, "-cl-mad-enable -cl-fast-relaxed-math -DWGX_MATCH_MIDDLE=%d -DWG_TARGETS_NO=%d -DTARGETS_PER_LOOP=%d", 
-                     WGX_MATCH_MIDDLE, WG_TARGETS_NO, TARGETS_PER_LOOP);
+    sprintf(options, "-cl-mad-enable -cl-fast-relaxed-math -DDM_WGX=%d -DDM_WG_TARGETS_NO=%d -DDM_TARGETS_PER_LOOP=%d", 
+                     DM_WGX, DM_WG_TARGETS_NO, DM_TARGETS_PER_LOOP);
 
     // Build denoising filter
     error = buildCachedProgram(daisyCl, "daisyMatchKernels.cl", options);
@@ -118,12 +118,17 @@ void saveBinary(float * array, int size, string filename){
 
 }
 
-void checkpoint(ocl_constructs * daisyCl, struct timeval * s, short int finishQueue){
+int checkpoint(ocl_constructs * daisyCl, struct timeval * s, short int finishQueue){
 
-  if(finishQueue)
-    clFinish(daisyCl->ioqueue);
+  int error = 0;
+
+  if(finishQueue){
+    error = clFinish(daisyCl->ioqueue);
+  }
 
   gettimeofday(s, NULL);
+
+  return error;
 
 }
 
@@ -147,11 +152,17 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
   int rotationsNo = ROTATIONS_NO;
   int templatePetalsPerRun = 8;
 
-  int rotationsNoMiddle = MIDDLE_ROTATIONS_NO; // default is 4
+  int rotationsNoMiddle = DM_ROTATIONS_NO; // default is 4
   int rotationsNoFine = 1;
-  int searchWidthMiddle = MIDDLE_SEARCH_WIDTH; // default is 32
+  int searchWidthMiddle = DM_SEARCH_WIDTH; // default is 32
   int searchWidthFine = 8;
   int seedTemplatePointsNo = MIDDLE_TEMPLATES_NO; // default is 512
+
+  // (pre) 5. Generate seed descriptors (512 of them)
+  point * seedTemplatePoints = generateTemplatePoints(daisyTemplate, seedTemplatePointsNo, 0, 0);  
+
+  // 5. Project them with the overall projection, then find 2 closest target descriptors
+  point * seedTargetPoints = (point*)malloc(sizeof(point) * seedTemplatePointsNo);
 
   int diffBufferSize1 = (coarseWidth * coarseHeight * rotationsNo);
   int diffBufferSize2 = (seedTemplatePointsNo * rotationsNoMiddle * (searchWidthMiddle * searchWidthMiddle));
@@ -177,34 +188,25 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                                        (seedTemplatePointsNo * 2) * sizeof(float),
                                        (void*)NULL, &error);
 
-  // The petal pair(s) that will be coarsely matched in the diffCoarse kernel
-  cl_mem petalBufferA = clCreateBuffer(daisyCl->context, CL_MEM_READ_ONLY,
-                                       3 * templatePetalsPerRun * GRADIENTS_NO * sizeof(float),
-                                       (void*) NULL, &error);
-  cl_mem petalBufferB = clCreateBuffer(daisyCl->context, CL_MEM_READ_ONLY,
-                                       3 * templatePetalsPerRun * GRADIENTS_NO * sizeof(float),
-                                       (void*) NULL, &error);
-  cl_mem petalBuffer;
-
   cl_mem pinnedArgminBuffer = clCreateBuffer(daisyCl->context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, 
                                              argminBufferLength * sizeof(float), NULL, &error);
 
   if(oclErrorM("oclDaisy","clCreateBuffer (pinnedArgmin)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
-  float * argmin = (float *) clEnqueueMapBuffer(daisyCl->ioqueue, pinnedArgminBuffer, 1,
-                                                CL_MAP_READ, 0, argminBufferLength * sizeof(float),
-                                                0, NULL, NULL, &error);
+  float * argmin = (float*) clEnqueueMapBuffer(daisyCl->ioqueue, pinnedArgminBuffer, 1,
+                                              CL_MAP_WRITE, 0, argminBufferLength * sizeof(float),
+                                              0, NULL, NULL, &error);
 
   if(oclErrorM("oclDaisy","clEnqueueMapBuffer (pinnedArgmin)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
   // Setup diffCoarse kernel
-  int workersPerPixel = 16;
+  int workersPerPixel = 4;
   const size_t wgsDiffCoarse[2] = {64, 1};
   const size_t wsDiffCoarse[2] = {coarseWidth * workersPerPixel, coarseHeight};
 
+  clSetKernelArg(daisyTemplate->oclKernels->diffCoarse, 0, sizeof(templateBuffer), (void*)&templateBuffer);
   clSetKernelArg(daisyTemplate->oclKernels->diffCoarse, 1, sizeof(targetBuffer), (void*)&targetBuffer);
   clSetKernelArg(daisyTemplate->oclKernels->diffCoarse, 2, sizeof(diffBuffer), (void*)&diffBuffer);
-  clSetKernelArg(daisyTemplate->oclKernels->diffCoarse, 3, sizeof(int), (void*)&(daisyTarget->paddedWidth));
 
   // Setup transposeRotations kernel
   const size_t wgsTransposeRotations[2] = {128, 1};
@@ -226,22 +228,23 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
   clSetKernelArg(daisyTemplate->oclKernels->reduceMin, 2, sizeof(int), (void*)&diffBufferSize);
   clSetKernelArg(daisyTemplate->oclKernels->reduceMin, 3, sizeof(float) * wgsReduceMin, (void*)NULL);
 
-  const size_t wgsReduceMinAll = (coarseHeight * coarseWidth) / wgsReduceMin;
+  const size_t minimaPerRot =  (coarseHeight * coarseWidth) / wgsReduceMin;
+  const size_t wgsReduceMinAll = max(minimaPerRot, 64);
   const size_t wsReduceMinAll = wgsReduceMinAll * rotationsNo;
 
   clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 0, sizeof(diffBufferTrans), (void*)&diffBufferTrans);
   clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 1, sizeof(diffBuffer), (void*)&diffBuffer);
   clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 2, sizeof(argminBuffer), (void*)&argminBuffer);
-  clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 3, sizeof(int), (void*)&wgsReduceMinAll);
+  clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 3, sizeof(int), (void*)&minimaPerRot);
   clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 4, sizeof(float) * wgsReduceMinAll, (void*)NULL);
   clSetKernelArg(daisyTemplate->oclKernels->reduceMinAll, 5, sizeof(int), (void*)&templatePointsNo);
 
-  unsigned int offsetToFine = 1 * GRADIENTS_NO;
+  unsigned int offsetToFine = (TRANSD_FAST_PETAL_PADDING + 1) * GRADIENTS_NO;
   unsigned int offsetToDescriptor = (templatePoints[0].y  * daisyTemplate->paddedWidth + 
                                      templatePoints[0].x) * DESCRIPTOR_LENGTH;
 
-  const size_t wgsDiffMiddle[2] = { WGX_MATCH_MIDDLE, 1}; // OPTIMAL = 128
-  int targetPixelsPerWorkgroup = WG_TARGETS_NO;           // OPTIMAL = 32
+  const size_t wgsDiffMiddle[2] = { DM_WGX, 1 };
+  int targetPixelsPerWorkgroup = DM_WG_TARGETS_NO;
   int workersPerTargetPixel = wgsDiffMiddle[0] / targetPixelsPerWorkgroup;
 
   int seedTemplatesPerRun = seedTemplatePointsNo; // multi-block processing causes errors - keep this until fixed
@@ -254,27 +257,23 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
   clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 3, sizeof(corrsBuffer), (void*)&corrsBuffer);
   clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 4, sizeof(int), (void*)&daisyTarget->paddedWidth);
 
-  // Copy first descriptor petals
-  error = clEnqueueCopyBuffer(daisyCl->ioqueue, templateBuffer, petalBufferA,
-  	                          (offsetToDescriptor + offsetToFine) * sizeof(float), 0,
-                              3 * templatePetalsPerRun * GRADIENTS_NO * sizeof(float),
-  	                          0, NULL, NULL);
-
   cl_event lastReduction;
 
   checkpoint(daisyCl, &times->startMatchDaisy, 1);
 
   for(int templatePointNo = 0; templatePointNo < templatePointsNo; templatePointNo++){
 
-    petalBuffer = (templatePointNo % 2 ? petalBufferB : petalBufferA);
-
-    clSetKernelArg(daisyTemplate->oclKernels->diffCoarse, 0, sizeof(petalBuffer), (void*)&petalBuffer);
-
     checkpoint(daisyCl, &times->startDiffCoarse, times->enabled);
+
+    point p = templatePoints[templatePointNo];
+
+    int templateNo = (p.y * daisyTemplate->paddedWidth + p.x);
 
     for(int regionNo = 2; regionNo > -1; regionNo--){
 
-      clSetKernelArg(daisyTemplate->oclKernels->diffCoarse, 4, sizeof(int), (void*)&regionNo);
+      clSetKernelArg(daisyTemplate->oclKernels->diffCoarse, 3, sizeof(int), (void*)&templateNo);
+      clSetKernelArg(daisyTemplate->oclKernels->diffCoarse, 4, sizeof(int), (void*)&(daisyTarget->paddedWidth));
+      clSetKernelArg(daisyTemplate->oclKernels->diffCoarse, 5, sizeof(int), (void*)&regionNo);
 
       // Compute diffCoarse
       error = clEnqueueNDRangeKernel(daisyCl->ioqueue, daisyTemplate->oclKernels->diffCoarse, 2, 
@@ -286,23 +285,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
     }
 
     checkpoint(daisyCl, &times->endDiffCoarse, times->enabled);
-
-    // Do an async transfer of the template petal to the petal buffer for the next iteration
-    if(templatePointNo < templatePointsNo-1){
-
-      petalBuffer = (templatePointNo % 2 ? petalBufferA : petalBufferB);
-
-      // pixel to use from template
-      point p = templatePoints[templatePointNo + 1];
-
-      offsetToDescriptor = (p.y * daisyTemplate->paddedWidth + p.x) * DESCRIPTOR_LENGTH;
-
-      error = clEnqueueCopyBuffer(daisyCl->ioqueue, templateBuffer, petalBuffer,
-      	                          (offsetToDescriptor + offsetToFine) * sizeof(float), 0,
-                                  3 * templatePetalsPerRun * GRADIENTS_NO * sizeof(float),
-      	                          0, NULL, NULL);
-
-    }
+    times->diffCoarse += timeDiff(times->startDiffCoarse, times->endDiffCoarse);
 
     checkpoint(daisyCl, &times->startDiffTranspose, times->enabled);
 
@@ -314,6 +297,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
     if(oclErrorM("oclDaisy","clEnqueueNDRangeKernel (transposeRotations)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
 
     checkpoint(daisyCl, &times->endDiffTranspose, times->enabled);
+    times->transRot += timeDiff(times->startDiffTranspose, times->endDiffTranspose);
 
 #ifdef STOREOUTPUT
 
@@ -353,6 +337,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
     }
 
     checkpoint(daisyCl, &times->endReduceCoarse1, times->enabled);
+    times->reduceMin += timeDiff(times->startReduceCoarse1, times->endReduceCoarse1);
 
     const size_t wsoReduceMinAll = templatePointNo;
 
@@ -365,13 +350,13 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                                    0, NULL, (templatePointNo == templatePointsNo-1 ? &lastReduction : NULL));
 
     checkpoint(daisyCl, &times->endReduceCoarse2, times->enabled);
+    times->reduceMinAll += timeDiff(times->startReduceCoarse2, times->endReduceCoarse2);
 
   }
 
   error = clEnqueueReadBuffer(daisyCl->ioqueue, argminBuffer, CL_TRUE,
                               0, argminBufferLength * sizeof(float), argmin,
                               1, &lastReduction, NULL);
-
 
   //
   // Process correspondences
@@ -443,7 +428,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                                        targetSize, templateSize, projectionErrors);
 
   // Filter out some of the correspondences with the projection errors
-  float PROJERROR_THRESH = 0.15;
+  float PROJERROR_THRESH = 0.45;
   int * filteredTemplateMatches = (int*)malloc(sizeof(int) * corrsNo);
   int * filteredMatches = (int*)malloc(sizeof(int) * corrsNo);
   int matchesNo = 0;
@@ -475,12 +460,6 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                     max(min(min(min(p1.y, p2.y), p3.y), p4.y), 0)};
   point bottomRight = { min(max(max(max(p1.x, p2.x), p3.x), p4.x), targetSize.x-1),
                         min(max(max(max(p1.y, p2.y), p3.y), p4.y), targetSize.y-1)};*/
-
-  // (pre) 5. Generate seed descriptors (512 of them)
-  point * seedTemplatePoints = generateTemplatePoints(daisyTemplate, seedTemplatePointsNo, 0, 0);  
-
-  // 5. Project them with the overall projection, then find 2 closest target descriptors
-  point * seedTargetPoints = (point*)malloc(sizeof(point) * seedTemplatePointsNo);
 
   // Get local projection of those 2 target descriptors and re-project seed descriptor
   projectTargetSeeds(seedTemplatePoints, seedTargetPoints, seedTemplatePointsNo,
@@ -527,7 +506,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
 #endif
 
   // 7. Search the middle layer
-  int spacingMiddle = 2;
+  int spacingMiddle = 1;
 
   printf("\nB) MiddleLayer [%dx%d] - Search Resolution = %d - Seeds = %d - Rotations = %d\n", 
          searchWidthMiddle, searchWidthMiddle,
@@ -548,7 +527,7 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
                          0, seedTemplatesPerRun * 2 * sizeof(float), (void*) (corrs + seedTemplatesPerRun * 2 * run),
                          0, NULL, &corrTransfer);
 
-    checkpoint(daisyCl, &times->startDiffMiddle, times->enabled);
+    checkpoint(daisyCl, &times->startDiffMiddle, 1);
 
     for(int petalRegionNo = 2; petalRegionNo > -1; petalRegionNo--){
 
@@ -556,9 +535,12 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
       int regionNo = petalRegionNo;
       int templateNoOffset = seedTemplatesPerRun * run;
 
-      clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 5, sizeof(int), (void*)&regionNo);
-      clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 6, sizeof(int), (void*)&rotationNo);
-      clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 7, sizeof(int), (void*)&templateNoOffset);
+      int pixelSpacing = (regionNo == 2 ? 2 : 1);
+
+      clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 5, sizeof(float) * (DM_TARGETS_PER_LOOP / pixelSpacing) * (64 + 2), (void*) NULL);
+      clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 6, sizeof(int), (void*)&regionNo);
+      clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 7, sizeof(int), (void*)&rotationNo);
+      clSetKernelArg(daisyTemplate->oclKernels->diffMiddle, 8, sizeof(int), (void*)&templateNoOffset);
 
       //const size_t wsoDiffMiddle[2] = { 0, seedTemplatesPerRun * run };
 
@@ -569,12 +551,13 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
 
     }
 
-    checkpoint(daisyCl, &times->endDiffMiddle, times->enabled);
+    checkpoint(daisyCl, &times->endDiffMiddle, 1);
 
   }
-
-  checkpoint(daisyCl, &times->endMatchDaisy, 1);
-
+//  printf("Transform = [%.2f, %.2f, %.2f, %.2f]\n", t->th, t->s, t->tx, t->ty);
+  error = checkpoint(daisyCl, &times->endMatchDaisy, 1);
+  if(oclErrorM("oclMatchDaisy","clFinish(end)",error)) printf("oclMatchDaisy.cpp::clFinish(end) failed %d\n",error);//return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
+//  clFinish(daisyCl->ioqueue);
   times->difft = timeDiff(times->startMatchDaisy,times->endMatchDaisy);
 
   printf("Match: %.2f ms\n",times->difft);
@@ -683,11 +666,15 @@ int oclMatchDaisy(daisy_params * daisyTemplate, daisy_params * daisyTarget,
 
 #endif
 
+  // Uncomment when calling oclDaisy multiple times
+  error = clEnqueueUnmapMemObject(daisyCl->ioqueue, pinnedArgminBuffer, (void*)argmin, 0, NULL, NULL);
+  if(oclErrorM("oclDaisy","clEnqueueUnmapMemObject (pinned daisy)",error)) return oclCleanUp(daisyTemplate->oclKernels,daisyCl,error);
+//  free(argmin);
+
+  clReleaseMemObject(pinnedArgminBuffer);
   clReleaseMemObject(argminBuffer);
   clReleaseMemObject(diffBuffer);
   clReleaseMemObject(corrsBuffer);
-  clReleaseMemObject(petalBufferA);
-  clReleaseMemObject(petalBufferB);
   clReleaseMemObject(diffBufferTrans);
 
   return error;

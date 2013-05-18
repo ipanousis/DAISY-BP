@@ -74,7 +74,13 @@ typedef struct ocl_daisy_kernels_tag{
 #define GRADIENTS_NO 8
 #define REGION_PETALS_NO 8
 #define TOTAL_PETALS_NO (SMOOTHINGS_NO * REGION_PETALS_NO + 1)
-#define DESCRIPTOR_LENGTH (TOTAL_PETALS_NO * GRADIENTS_NO)
+
+// Padding for aligned memory mapping in fast kernel
+// not needed for NVIDIA CC 3.0 which uses cache to serve misaligned accesses
+// but if such is not the case then it should be used to give petal writes a 64-byte alignment
+#define TRANSD_FAST_PETAL_PADDING 0
+
+#define DESCRIPTOR_LENGTH (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO
 
 #ifndef DAISY_PARAMS
 #define DAISY_PARAMS
@@ -135,6 +141,8 @@ typedef struct time_params_tag{
   struct timeval startDiffMiddle, endDiffMiddle; // time to do middle layer diffs of many points in local regions with middle spacing, for all 3 petal regions
 
   struct timeval startMatchCpu, endMatchCpu;
+
+  double diffCoarse, transRot, reduceMin, reduceMinAll;
 
   double transPinned, transRam;
 

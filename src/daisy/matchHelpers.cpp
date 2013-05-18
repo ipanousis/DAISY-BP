@@ -45,7 +45,7 @@ point estimateObjectCentre(point * templatePoints, int * templateMatches, int * 
       // compute 2d projection
       transform trans = get2dProjection(source1, source2, target1, target2);
       // project template centre with it
-      centres[centresNo++] = projectPoint({templateSize.x / 2, templateSize.y / 2}, trans);
+      projectPoint({templateSize.x / 2, templateSize.y / 2}, trans, centres + centresNo++);
       centre.x += centres[centresNo-1].x;
       centre.y += centres[centresNo-1].y;
       
@@ -101,7 +101,8 @@ void projectTargetSeeds(point * seedTemplatePoints, point * seedTargetPoints, in
   for(int s = 0; s < seedsNo; s++){
 
     // project template seed with overall projection
-    point initialSeed = projectPoint(seedTemplatePoints[s], *t);
+    point initialSeed;
+    projectPoint(seedTemplatePoints[s], *t, &initialSeed); // CHECK BOUNDARIES OF PROJECTED POINT
 
     // find 2 closest correspondences in target
     float min1 = 9999;
@@ -109,23 +110,30 @@ void projectTargetSeeds(point * seedTemplatePoints, point * seedTargetPoints, in
     int argmin1 = -1;
     int argmin2 = -1;
     for(int t = 0; t < matchesNo; t++){
+
       float dist = sqrt(pow(initialSeed.x - 
                        (matches[t] % static_cast<int>(targetSize.x)),2) + 
                         pow(initialSeed.y - floor(matches[t] / targetSize.x),2));
+
       if(dist < min1){
         min2 = min1;
         min1 = dist;
         argmin2 = argmin1;
         argmin1 = t;
       }
+
       else if(dist < min2){
         min2 = dist;
         argmin2 = t;
       }
+
     }
 
-    if(argmin1 < 0 || argmin2 < 0)
+    if(argmin1 < 0 || argmin2 < 0){
       printf("HELPPPPPP!\n");
+      printf("SEED XY [%d,%d]\n",(int)seedTemplatePoints[s].x,(int)seedTemplatePoints[s].y);
+      printf("INITSEED XY [%d,%d]\n",(int)initialSeed.x,(int)initialSeed.y);
+    }
 
     // get projection of the closest points
     transform localt = get2dProjection(templatePoints[templateMatches[argmin1]], templatePoints[templateMatches[argmin2]],
@@ -133,16 +141,18 @@ void projectTargetSeeds(point * seedTemplatePoints, point * seedTargetPoints, in
                    { (float)(matches[argmin2] % static_cast<int>(targetSize.x)), floorf(matches[argmin2] / targetSize.x)});
 
     // re-project template seed
-    seedTargetPoints[s] = projectPoint(seedTemplatePoints[s], localt);
+    projectPoint(seedTemplatePoints[s], localt, seedTargetPoints + s); // CHECK BOUNDARIES OF PROJECTED POINT
+    if(seedTargetPoints[s].x < 0 || seedTargetPoints[s].x >= targetSize.x || seedTargetPoints[s].y < 0 || seedTargetPoints[s].y >= targetSize.y)
+      seedTargetPoints[s] = initialSeed;
 
   }
 
 }
 
-point projectPoint(point p, transform t){
+void projectPoint(point p, transform t, point * to){
 
-  return { (float)(p.x * t.s * cos(t.th) - p.y * t.s * sin(t.th) + t.tx),
-           (float)(p.x * t.s * sin(t.th) + p.y * t.s * cos(t.th) + t.ty)};
+  to->x = (float)(p.x * t.s * cos(t.th) - p.y * t.s * sin(t.th) + t.tx);
+  to->y = (float)(p.x * t.s * sin(t.th) + p.y * t.s * cos(t.th) + t.ty);
 
 }
 
@@ -168,11 +178,12 @@ transform * minimise2dProjection(point * templatePoints, int * templateMatches, 
       // measure errors
       float errorSum = 0;
       for(int c = 0; c < corrsNo; c++){
-        point p = projectPoint(templatePoints[templateMatches[c]], trans);
+        point p;
+        projectPoint(templatePoints[templateMatches[c]], trans, &p);
         errors[c] =   sqrt(pow(targetMatches[c] % static_cast<int>(targetSize.x) - p.x,2) + 
-                           pow(floor(targetMatches[c] / targetSize.x) - p.y,2))
-                       / sqrt(pow(targetMatches[c] % static_cast<int>(targetSize.x) - templatePoints[templateMatches[c]].x,2)
-                            + pow(floor(targetMatches[c] / targetSize.x) - templatePoints[templateMatches[c]].y,2));
+                           pow(floor(targetMatches[c] / targetSize.x) - p.y,2)) / sqrt(pow(targetSize.x,2) + pow(targetSize.y,2));
+                     //  / sqrt(pow(targetMatches[c] % static_cast<int>(targetSize.x) - templatePoints[templateMatches[c]].x,2)
+                     //       + pow(floor(targetMatches[c] / targetSize.x) - templatePoints[templateMatches[c]].y,2));
         errorSum += errors[c];
       }
       

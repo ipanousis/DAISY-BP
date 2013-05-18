@@ -21,7 +21,7 @@ void writeInfofile(daisy_params * daisy, char * binaryfile);
 void profileSpeed(short int cpuTransfer);
 void runDaisy(char * filename, short int saveBinary);
 void runMatcher(char * f1, char * f2);
-void runMatchProfile();
+void runMatchProfile(char * label);
 
 int main( int argc, char **argv  )
 {
@@ -70,7 +70,7 @@ int main( int argc, char **argv  )
 
     counter++;
 
-    runMatchProfile();
+    runMatchProfile(argv[counter]);
 
   }
   else{
@@ -110,7 +110,7 @@ void runMatcher(char * f1, char * f2){
 
 }
 
-void runMatchProfile(){
+void runMatchProfile(char * csvLabel){
 
   time_params * times = (time_params*) malloc(sizeof(time_params));
   times->measureDeviceHostTransfers = 0;
@@ -151,6 +151,11 @@ void runMatchProfile(){
 
   for(int i = 0; i < iterations; i++){
 
+    times->diffCoarse = 0;
+    times->transRot = 0;
+    times->reduceMin = 0;
+    times->reduceMinAll = 0;
+
     success += oclMatchDaisy(daisyTemplate, daisyTarget, daisyCl, times);
 
     if(success != 0)
@@ -160,10 +165,14 @@ void runMatchProfile(){
 
     // Add up the times
     matchTimes[i] = timeDiff(times->startMatchDaisy, times->endMatchDaisy);
-    t_diffc += timeDiff(times->startDiffCoarse, times->endDiffCoarse);
-    t_trans += timeDiff(times->startDiffTranspose, times->endDiffTranspose);
-    t_reduce1 += timeDiff(times->startReduceCoarse1, times->endReduceCoarse1);
-    t_reduce2 += timeDiff(times->startReduceCoarse2, times->endReduceCoarse2);
+//    t_diffc += timeDiff(times->startDiffCoarse, times->endDiffCoarse);
+    t_diffc += times->diffCoarse;
+//    t_trans += timeDiff(times->startDiffTranspose, times->endDiffTranspose);
+    t_trans += times->transRot;
+//    t_reduce1 += timeDiff(times->startReduceCoarse1, times->endReduceCoarse1);
+    t_reduce1 += times->reduceMin;
+//    t_reduce2 += timeDiff(times->startReduceCoarse2, times->endReduceCoarse2);
+    t_reduce2 += times->reduceMinAll;
     t_diffm += timeDiff(times->startDiffMiddle, times->endDiffMiddle);
     matchTimesCpu[i] = timeDiff(times->startMatchCpu, times->endMatchCpu);
 
@@ -191,19 +200,19 @@ void runMatchProfile(){
   char * csvOutName = (char*)malloc(sizeof(char) * 200);
   char * nameTemplate = (char*)malloc(sizeof(char) * 100);
 
-  strcpy(nameTemplate,"gdaisy-match-speeds-%02d%02d.csv");
+  strcpy(nameTemplate,"gdaisy-match-speeds-%02d%02d-%s.csv");
 
-  sprintf(csvOutName, nameTemplate, sysTime->tm_mon+1, sysTime->tm_mday);//, sysTime->tm_hour, sysTime->tm_min);
+  sprintf(csvOutName, nameTemplate, sysTime->tm_mon+1, sysTime->tm_mday, csvLabel);//, sysTime->tm_hour, sysTime->tm_min);
 
   short int newFile = (access(csvOutName, F_OK) == -1);
 
   FILE * csvOut = fopen(csvOutName,"a+");
 
   if(newFile)
-    fprintf(csvOut,"templateH,templateW,targetH,targetW,MIDDLETEMPS,WGX,WGTRGS,TRGPL,diffCoarse,diffTrans,\
+    fprintf(csvOut,"templateH,templateW,targetH,targetW,WGX,DM_WG_TARGETS_NO,DM_TARGETS_PER_LOOP,COARSE_TEMPLATES_NO,MIDDLE_TEMPLATES_NO,DM_SEARCH_WIDTH,DM_ROTATIONS_NO,diffCoarse,diffTrans,\
 reduceCoarse1,reduceCoarse2,diffMiddle,daisyMatch,daisyMatchStd,daisyMatchCpu,iterations,success\n");
 
-  const char * templateRow = "%d,%d,%d,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%.2f\n";
+  const char * templateRow = "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%.2f\n";
 
   double t_matchstd = getStd(matchTimes,n);
   double t_matchcpustd = getStd(matchTimesCpu,n);
@@ -211,8 +220,8 @@ reduceCoarse1,reduceCoarse2,diffMiddle,daisyMatch,daisyMatchStd,daisyMatchCpu,it
   fprintf(csvOut, templateRow,
                   daisyTemplate->paddedHeight, daisyTemplate->paddedWidth,
                   daisyTarget->paddedHeight, daisyTarget->paddedWidth,
-                  MIDDLE_TEMPLATES_NO, 
-                  WGX_MATCH_MIDDLE, WG_TARGETS_NO, TARGETS_PER_LOOP, t_diffc, t_trans, t_reduce1, t_reduce2, t_diffm, t_match, t_matchstd,
+                  DM_WGX, DM_WG_TARGETS_NO, DM_TARGETS_PER_LOOP, COARSE_TEMPLATES_NO, MIDDLE_TEMPLATES_NO, DM_SEARCH_WIDTH, DM_ROTATIONS_NO, 
+                  t_diffc, t_trans, t_reduce1, t_reduce2, t_diffm, t_match, t_matchstd,
                   t_matchcpu, t_matchcpustd,
                   iterations, success);
 

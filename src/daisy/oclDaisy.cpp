@@ -38,13 +38,6 @@ long int verifyTransposeDaisyPairs(daisy_params * daisy, float * transArray, flo
 #define TR_PAIRS_SINGLE_ONLY -999
 #define TR_PAIRS_OFFSET_WIDTH 1000
 
-// Padding for aligned memory mapping in fast kernel
-// not needed for NVIDIA CC 3.0 which uses cache to serve misaligned accesses
-// but if such is not the case then it should be used to give petal writes a 64-byte alignment
-#define TRANSD_FAST_PETAL_PADDING 0
-
-#define DESCRIPTOR_LENGTH (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO
-
 daisy_params * newDaisyParams(const char * filename, unsigned char* array, int height, int width,
                               short int cpuTransfer){
 
@@ -179,8 +172,8 @@ int initOcl(daisy_params * daisy, ocl_constructs * daisyCl){
   // Pass preprocessor build options
 //  const char options[128] = "-cl-mad-enable -cl-fast-relaxed-math -DFSC=14";    
   char * options = (char*) malloc(sizeof(char) * 500);
-  sprintf(options, "-cl-mad-enable -cl-fast-relaxed-math -DWGX_MATCH_MIDDLE=%d -DWG_TARGETS_NO=%d -DTARGETS_PER_LOOP=%d -DSEARCH_WIDTH=%d -DROTATIONS_NO_MIDDLE=%d", 
-                     WGX_MATCH_MIDDLE, WG_TARGETS_NO, TARGETS_PER_LOOP, MIDDLE_SEARCH_WIDTH, MIDDLE_ROTATIONS_NO);
+  sprintf(options, "-cl-mad-enable -cl-fast-relaxed-math -DDM_WGX=%d -DDM_WG_TARGETS_NO=%d -DDM_TARGETS_PER_LOOP=%d -DDM_SEARCH_WIDTH=%d -DDM_ROTATIONS_NO=%d", 
+                     DM_WGX, DM_WG_TARGETS_NO, DM_TARGETS_PER_LOOP, DM_SEARCH_WIDTH, DM_ROTATIONS_NO);
 
   // Build denoising filter
   error = buildCachedProgram(daisyCl, "daisyKernels.cl", options);

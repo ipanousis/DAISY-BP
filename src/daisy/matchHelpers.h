@@ -17,4 +17,4 @@ void projectTargetSeeds(point * seedTemplatePoints, point * seedTargetPoints, in
                         point * templatePoints, int * templateMatches,
                         int * matches, int matchesNo, point coarseTargetSize, transform * t);
 
-point projectPoint(point p, transform t);
+void projectPoint(point p, transform t, point * to);

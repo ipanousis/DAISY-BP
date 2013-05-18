@@ -18,7 +18,7 @@
   where DAISY floats 1,2,...200 outer dimension is Petals and inner (fast-moving) 
   is gradients (TOTAL_PETALS_NO * GRADIENTS_NO). N = imageWidth * imageHeight
 
-  B) With TRANSD_FAST_PETAL_PADDING > 0 (probably equal to 1)
+  B) With (Prefix Padding) TRANSD_FAST_PETAL_PADDING > 0
 
   Inter-descriptor memory: non-contiguous, a gap of 
                            PADDING = TRANSD_FAST_PETAL_PADDING * GRADIENTS_NO
@@ -630,7 +630,7 @@ kernel void transposeDaisyPairs(global  float * srcArray,
   int targetX = get_group_id(0) * ((TRANSD_FAST_WG_X * TRANSD_FAST_STEPS) / (2 * GRADIENTS_NO)) + 
                 (petalOutOffset / TOTAL_PETALS_NO) % srcWidth + lx / (GRADIENTS_NO * 2);
 
-  int targetPetalOffset = ((targetY * srcWidth + targetX) * (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + 
+  int targetPetalOffset = ((targetY * srcWidth + targetX) * (TOTAL_PETALS_NO + 0) + 
                           abs(petalOutOffset % TOTAL_PETALS_NO) + TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO;
 
   int localOffset = (TRANSD_FAST_PETAL_PAIRS * TRANSD_FAST_STEPS * ((lx / GRADIENTS_NO) % 2) + 
@@ -665,10 +665,10 @@ kernel void transposeDaisySingles(global float * srcArray,
    const int gx = get_global_id(0);
    const int gsx = get_global_size(0);
 
-   // no steps
+   // no steps//TRANSD_FAST_PETAL_PADDING) + 
    dstArray[(((gy % blockHeight) * (gsx / GRADIENTS_NO) + gx / GRADIENTS_NO) * 
               (TOTAL_PETALS_NO + TRANSD_FAST_PETAL_PADDING) + 
-              TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO + 
+              TRANSD_FAST_PETAL_PADDING) * GRADIENTS_NO +
               gx % GRADIENTS_NO] = srcArray[gy * gsx + gx];
 
 }
@@ -693,8 +693,7 @@ kernel void fetchDaisy(global float * array)
 
     lclDescriptors[i * WG_FETCHDAISY_X + lx] = 
 
-          array[(daisyNo * (DESCRIPTOR_LENGTH + TRANSD_FAST_PETAL_PADDING) + 
-                TRANSD_FAST_PETAL_PADDING * GRADIENTS_NO) + 
+          array[daisyNo * DESCRIPTOR_LENGTH + 
                 i * WG_FETCHDAISY_X + lx];
 
     
@@ -708,9 +707,8 @@ kernel void fetchDaisy(global float * array)
 
     if(i * WG_FETCHDAISY_X + lx >= DESCRIPTOR_LENGTH) break;
 
-    array[(daisyNo * (DESCRIPTOR_LENGTH + TRANSD_FAST_PETAL_PADDING) + 
-                    TRANSD_FAST_PETAL_PADDING * GRADIENTS_NO) + 
-                    i * WG_FETCHDAISY_X + lx] =
+    array[daisyNo * DESCRIPTOR_LENGTH + 
+          i * WG_FETCHDAISY_X + lx] =
               
                lclDescriptors[i * WG_FETCHDAISY_X + lx];
 
@@ -737,29 +735,31 @@ kernel void fetchDaisy(global float * array)
 #define ROTATIONS_NO 8
 
 #define DC_TMP_PETALS_NO 8
-#define DC_TRG_PIXELS_NO 4
+#define DC_TRG_PIXELS_NO 16
 #define DC_TRG_PER_LOOP 2
 #define DC_WGX 64
 #define DC_PX_SPACING 4
 
 #define DIFFSC ((DC_TRG_PER_LOOP * DC_TMP_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO) / DC_WGX)
 
+#define DC_PX_PADDING 1
+
 kernel void diffCoarse( global   float * tmp,
                         global   float * trg,
                         global   float * out,
+                        const    int     templateOffset,
                         const    int     width,
                         const    int     regionNo)
 {
-
   local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO];
-  local float lclTrg[DC_TRG_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO + 1];
+  local float lclTrg[DC_TRG_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO + DC_PX_PADDING)];
 
   const int lid = get_local_id(0);
   const int gx = get_global_id(0);
   const int gy = get_global_id(1);
 
   // fetch template pixel
-  lclTmp[lid] = tmp[regionNo * REGION_PETALS_NO * GRADIENTS_NO + lid];
+  lclTmp[lid] = tmp[templateOffset * DESCRIPTOR_LENGTH + (TRANSD_FAST_PETAL_PADDING + regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lid];
 
   int targetStep;
   for(targetStep = 0; targetStep < DC_TRG_PIXELS_NO / DC_TRG_PER_LOOP; targetStep++){
@@ -768,11 +768,11 @@ kernel void diffCoarse( global   float * tmp,
     int i;
     for(i = 0; i < DC_TRG_PER_LOOP; i++){
 
-      lclTrg[i * (DC_WGX+1) + lid] = 
+      lclTrg[i * (DC_WGX+DC_PX_PADDING) + lid] = 
 
         trg[((gy * DC_PX_SPACING + max((DC_PX_SPACING / 2 -1),0)) * width + ((gx / DC_WGX) * DC_TRG_PIXELS_NO + targetStep * DC_TRG_PER_LOOP + i) * 
-             DC_PX_SPACING + max((DC_PX_SPACING / 2 -1),0)) * DESCRIPTOR_LENGTH + 
-             (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lid];
+             DC_PX_SPACING + max((DC_PX_SPACING / 2 -1),0)) * DESCRIPTOR_LENGTH +
+             (TRANSD_FAST_PETAL_PADDING + regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lid];
 
     }
 
@@ -796,7 +796,7 @@ kernel void diffCoarse( global   float * tmp,
 
       // pick pixel, pick rotation => pick petal, pick gradient
       diffs += fabs(lclTmp[petalNo * GRADIENTS_NO + i] - 
-                    lclTrg[pixelNo + pixelNo * REGION_PETALS_NO * GRADIENTS_NO + 
+                    lclTrg[pixelNo * (REGION_PETALS_NO * GRADIENTS_NO + DC_PX_PADDING) + 
                            ((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
                             (trgFirstGradient + i) % GRADIENTS_NO]);
 
@@ -854,7 +854,7 @@ kernel void transposeRotations(global float * in,
   const int gx = get_global_id(0);
 
   lcl[lid] = in[gy * width * ROTATIONS_NO + gx];
-
+  
   barrier(CLK_LOCAL_MEM_FENCE);
 
   // will have 32 threads per target rotation
@@ -867,12 +867,6 @@ kernel void transposeRotations(global float * in,
 
 }
 
-/*
-    This version is completely unrolled.  It uses a template parameter to achieve 
-    optimal code for any (power of 2) number of threads.  This requires a switch 
-    statement in the host code to handle all the different thread block sizes at 
-    compile time.
-*/
 #define WGX_REDUCEMIN 256
 
 kernel void reduceMin(global float * in,
@@ -882,75 +876,35 @@ kernel void reduceMin(global float * in,
 
     // perform first level of reduction,
     // reading from global memory, writing to shared memory
-    const unsigned int lid = get_local_id(0);
-    const unsigned int i = get_group_id(0) * (get_local_size(0) * 1) + lid;
+    const int lid = get_local_id(0);
+    const int i = get_group_id(0) * (get_local_size(0) * 1) + lid;
 
-    unsigned int isLess;
+    short int isLess;
     if(i < size){
       lcl[lid] = in[get_global_id(0)];
     }
     else{ lcl[lid] = 999; return; }
 
-/*    if(i + WGX_REDUCEMIN < size){
-
-       argmin = (isless(lcl[lid],in[i + WGX_REDUCEMIN]) ? argmin : i + WGX_REDUCEMIN);
-       lcl[lid] = min(lcl[lid],in[i + WGX_REDUCEMIN]);
-
-    }*/
-
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    if(WGX_REDUCEMIN == 512){
-      if(lid < 256){
+    if(lid < 128){
 
-        isLess = isless(lcl[lid], lcl[lid + 256]);
-        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 256]);
-        lcl[lid + 256] = (isLess ? lid : lid + 256);
+      isLess = isless(lcl[lid], lcl[lid + 128]);
+      lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 128]);
+      lcl[lid + 128] = (isLess ? lid : lid + 128);
 
-      }
-    }
-    else if(WGX_REDUCEMIN == 256){
-      if(lid < 128){
-
-        isLess = isless(lcl[lid], lcl[lid + 128]);
-        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 128]);
-        lcl[lid + 128] = (isLess ? lid : lid + 128);
-
-      }
-    }
-    else if(WGX_REDUCEMIN == 128){
-      if(lid < 64){
-
-        isLess = isless(lcl[lid], lcl[lid + 64]);
-        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 64]);
-        lcl[lid + 64] = (isLess ? lid : lid + 64);   
-
-      }
     }
 
     barrier(CLK_LOCAL_MEM_FENCE); 
 
-    // do reduction in shared mem
-    if(WGX_REDUCEMIN > 256) {
-      if(lid < 128) {
+    if(lid < 64) {
 
-        isLess = isless(lcl[lid],lcl[lid + 128]);
-        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 128]);
-        lcl[lid + 128] = (isLess ? lcl[lid + 256] : lcl[lid + 128 + 256]);
+      isLess = isless(lcl[lid],lcl[lid + 64]);
+      lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 64]);
+      lcl[lid + 64] = (isLess ? lcl[lid + 128] : lcl[lid + 64 + 128]);
 
-      }
-      barrier(CLK_LOCAL_MEM_FENCE); 
     }
-    if(WGX_REDUCEMIN > 128) {
-      if(lid < 64) {
-
-        isLess = isless(lcl[lid],lcl[lid + 64]);
-        lcl[lid] = (isLess ? lcl[lid] : lcl[lid + 64]);
-        lcl[lid + 64] = (isLess ? lcl[lid + 128] : lcl[lid + 64 + 128]);
-
-      }
-      barrier(CLK_LOCAL_MEM_FENCE); 
-    }
+    barrier(CLK_LOCAL_MEM_FENCE); 
     
     if (lid < 32)
     {
@@ -1010,15 +964,15 @@ kernel void reduceMin(global float * in,
 //
 // Reduce the minima given by the workgroups of reduceMin but for all rotations
 //
-//#define WGX_REDUCEMINALL = minimaPerRotation = (coarseHeight*coarseWidth / WGX_REDUCEMIN) = 64 for now
+//#define WGX_REDUCEMINALL = minimaPerRotation = (coarseHeight*coarseWidth / WGX_REDUCEMIN)
 kernel void reduceMinAll(global float * in,
                          global float * mid,
                          global float * out,
                          const  int     minimaPerRotation,
                          local  float * lcl,
                          const  int     outStride){
-
-    unsigned int isLess;
+  
+    short int isLess;
     const int wgid = get_group_id(0); // rotationNo
     const int lid = get_local_id(0);
 
@@ -1086,27 +1040,33 @@ kernel void normaliseRotation(global float * data,
 }
 
 //
-// 512 * N template points
+// Middle Layer - Large Number of Template Points
 //
+// Compile-Time Arguments
 //
-//#define TEMPLATE_POINTS_NO 512 * N
-//#define SEARCH_WIDTH 32
-//#define SEARCH_WIDTH 32
-#define PIXEL_SPACING 1
-//#define ROTATIONS_NO_MIDDLE 4
-//#define ROTATIONS_NO_MIDDLE 1
+// --- Tuning ---
+//#define DM_WGX
+//#define WG_TARGETS_NO
+//#define TARGETS_PER_LOOP
+//
+// GTX660 OPTIMAL: WGX = 128, WG_TARGETS_NO = 64, TARGETS_PER_LOOP = 8
+//
+// --- Layer Parameterisation ---
+//#define SEARCH_WIDTH
+//#define DM_ROTATIONS_NO
+//
 
-// OPTIMAL: WGX = 128, WG_TARGETS_NO = 32, TARGETS_PER_LOOP = 8
-//#define WGX_MATCH_MIDDLE 128
-//#define WG_TARGETS_NO 32
-//#define WG_TARGETS_NO 16
-#define WORKERS_PER_TEMPLATE ((SEARCH_WIDTH * SEARCH_WIDTH) / WG_TARGETS_NO) * WGX_MATCH_MIDDLE
-//#define TARGETS_PER_LOOP 8
-//#define TARGETS_PER_LOOP 16
-#define TARGETS_PER_WG (WGX_MATCH_MIDDLE / (REGION_PETALS_NO * GRADIENTS_NO))
-#define DIFFSM (TARGETS_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO * ROTATIONS_NO_MIDDLE) / WGX_MATCH_MIDDLE
-#define LCL_PADDING 2
-#define OUTPUT (TARGETS_PER_LOOP * ROTATIONS_NO_MIDDLE)
+
+#define DM_PIXEL_SPACING 1
+
+#define DM_WORKERS_PER_TEMPLATE ((DM_SEARCH_WIDTH * DM_SEARCH_WIDTH) / DM_WG_TARGETS_NO) * DM_WGX
+
+#define DM_IMPORTS_PER_WG (DM_WGX / (REGION_PETALS_NO * GRADIENTS_NO))
+
+#define DM_DIFFS (DM_TARGETS_PER_LOOP * REGION_PETALS_NO * GRADIENTS_NO * DM_ROTATIONS_NO) / DM_WGX
+#define DM_OUTPUT (DM_TARGETS_PER_LOOP * DM_ROTATIONS_NO)
+
+#define DM_LCL_PADDING 2
 
 // tmp - get template descriptors from
 // trg - get target descriptors from
@@ -1117,50 +1077,55 @@ kernel void diffMiddle( global   float * tmp,
                         global   float * diff,
                         global   float * corrs,
                         const    int     width,
+                        local    float * lclTrg,
                         const    int     regionNo,
                         const    int     startRotationNo, 
                         const    int     templateNoOffset)
 {
 
   local float lclTmp[REGION_PETALS_NO * GRADIENTS_NO + 1];
-  local float lclTrg[TARGETS_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO + LCL_PADDING)];
+//  local float lclTrg[TARGETS_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO + DM_LCL_PADDING)];
 
   const int lx = get_local_id(0);
 
   // get template pixel no
   const int templateNo = templateNoOffset + get_global_id(1);
-  const int searchNo = (get_global_id(0) / WGX_MATCH_MIDDLE) * WG_TARGETS_NO;
-  const int searchOffset = (((searchNo / SEARCH_WIDTH) - SEARCH_WIDTH / 2) * width 
-                         + ((searchNo % SEARCH_WIDTH) - SEARCH_WIDTH / 2)) * PIXEL_SPACING;
+  const int searchNo = (get_global_id(0) / DM_WGX) * DM_WG_TARGETS_NO;
+  const int searchOffset = (((searchNo / DM_SEARCH_WIDTH) - DM_SEARCH_WIDTH / 2) * width 
+                         + ((searchNo % DM_SEARCH_WIDTH) - DM_SEARCH_WIDTH / 2)) * DM_PIXEL_SPACING;
 
   const int targetOffset = (int)corrs[templateNo * 2 + 1] + searchOffset;
 
-  const int rotNo = ((lx * (TARGETS_PER_LOOP * ROTATIONS_NO_MIDDLE)) / WGX_MATCH_MIDDLE) % ROTATIONS_NO_MIDDLE;
+  const int rotNo = ((lx * (DM_TARGETS_PER_LOOP * DM_ROTATIONS_NO)) / DM_WGX) % DM_ROTATIONS_NO;
 
   // fetch template pixel
   if(lx < 64){
-    lclTmp[lx] = tmp[((int)corrs[templateNo * 2]) * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
-//    if(WGX_MATCH_MIDDLE == 32)
+    lclTmp[lx] = tmp[((int)corrs[templateNo * 2]) * DESCRIPTOR_LENGTH + (TRANSD_FAST_PETAL_PADDING + regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx];
+//    if(DM_WGX == 32)
 //      lclTmp[lx+32] = tmp[((int)corrs[templateNo * 2]) * DESCRIPTOR_LENGTH + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx + 32];
   }
 
+  const int pixelSpacing = (regionNo == 2 ? 2 : 1);
+
   int targetStep;
-  for(targetStep = 0; targetStep < (WG_TARGETS_NO / TARGETS_PER_LOOP); targetStep++){
+  for(targetStep = 0; targetStep < (DM_WG_TARGETS_NO / DM_TARGETS_PER_LOOP); targetStep++){
 
     int i;
     // fetch TARGETS_PER_LOOP target pixels to lclTrg; GRADIENTS_NO x REGION_PETALS_NO x TARGETS_PER_LOOP
-    for(i = 0; i < (TARGETS_PER_LOOP * (REGION_PETALS_NO * GRADIENTS_NO)) / WGX_MATCH_MIDDLE; i++){
+    for(i = 0; i < DM_TARGETS_PER_LOOP / (pixelSpacing * DM_IMPORTS_PER_WG); i++){
 
-      lclTrg[i * (WGX_MATCH_MIDDLE + LCL_PADDING * TARGETS_PER_WG) + 
-              (lx / (REGION_PETALS_NO * GRADIENTS_NO)) * LCL_PADDING + lx] =  
+        const int pxNo = (targetStep * (DM_TARGETS_PER_LOOP / pixelSpacing) + i * DM_IMPORTS_PER_WG
+                             + lx / (REGION_PETALS_NO * GRADIENTS_NO)) * pixelSpacing;
+
+        lclTrg[i * (DM_WGX + DM_LCL_PADDING * DM_IMPORTS_PER_WG) +
+                (lx / (REGION_PETALS_NO * GRADIENTS_NO)) * DM_LCL_PADDING + lx] =  
 
 
-          trg[targetOffset * DESCRIPTOR_LENGTH 
-                           + (targetStep * TARGETS_PER_LOOP + i * TARGETS_PER_WG 
-                           + lx / (REGION_PETALS_NO * GRADIENTS_NO)) * PIXEL_SPACING 
-                           * DESCRIPTOR_LENGTH 
+            trg[targetOffset * DESCRIPTOR_LENGTH +
 
-          + (regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx % (REGION_PETALS_NO * GRADIENTS_NO)];
+             + ((pxNo / DM_SEARCH_WIDTH) * width + pxNo % DM_SEARCH_WIDTH) * DESCRIPTOR_LENGTH 
+
+             + (TRANSD_FAST_PETAL_PADDING + regionNo * REGION_PETALS_NO + 1) * GRADIENTS_NO + lx % (REGION_PETALS_NO * GRADIENTS_NO)];
 
     }
 
@@ -1168,26 +1133,26 @@ kernel void diffMiddle( global   float * tmp,
 
     // do 4 rotation diffs
     float diffs = 0.0;
-    const int pixelNo = (lx * TARGETS_PER_LOOP) / WGX_MATCH_MIDDLE;
+    const int pixelNo = ((lx * DM_TARGETS_PER_LOOP) / DM_WGX) / pixelSpacing;
     const int rotationNo = (startRotationNo + rotNo) % ROTATIONS_NO;
 
-    for(i = 0; i < DIFFSM; i++){
+    for(i = 0; i < DM_DIFFS; i++){
 
 
       // IF WORKERS PER PETAL CHANGE THEN CHANGE THIS
-#if DIFFSM == 1
+#if DM_DIFFS == 1
       const int petalNo = (lx / 8) % REGION_PETALS_NO;  // for 64 workers per rotation
-#elif DIFFSM == 2
+#elif DM_DIFFS == 2
       const int petalNo = (lx / 4) % REGION_PETALS_NO;  // for 32 workers per rotation
-#elif DIFFSM == 4
+#elif DM_DIFFS == 4
       const int petalNo = (lx / 2) % REGION_PETALS_NO;  // for 16 workers per rotation
-#elif DIFFSM == 8
+#elif DM_DIFFS == 8
       const int petalNo = lx % REGION_PETALS_NO;        // for 8 workers per rotation
-#elif DIFFSM == 16
+#elif DM_DIFFS == 16
       const int petalNo = (lx % 4) * 2;                 // for 4 workers per rotation
-#elif DIFFSM == 32
+#elif DM_DIFFS == 32
       const int petalNo = (lx % 2) * 4;                 // for 2 workers per rotation
-#elif DIFFSM == 64
+#elif DM_DIFFS == 64
       const int petalNo = 0;                            // for 1 worker per rotation
 #endif
 
@@ -1198,7 +1163,7 @@ kernel void diffMiddle( global   float * tmp,
       // pick pixel, pick rotation => pick petal, pick gradient
       diffs += fabs(lclTmp[petalNo * GRADIENTS_NO + i] -                                  // (petalNo / 4) is padding that speeds up by 1ms
 
-                    lclTrg[pixelNo * (REGION_PETALS_NO * GRADIENTS_NO + LCL_PADDING) +    // the +1 is padding that speeds up by 1ms
+                    lclTrg[pixelNo * (REGION_PETALS_NO * GRADIENTS_NO + DM_LCL_PADDING) +    // the +1 is padding that speeds up by 1ms
 
                             ((trgPetal + i / GRADIENTS_NO) % REGION_PETALS_NO) * GRADIENTS_NO + 
 
@@ -1212,12 +1177,12 @@ kernel void diffMiddle( global   float * tmp,
     // put them in local memory
     lclTrg[lx] = diffs;
 
-#if OUTPUT <= (WGX_MATCH_MIDDLE / 2)
+#if DM_OUTPUT <= (DM_WGX / 2)
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
     // the first 32 threads sum 64 to 32
-    if(lx < WGX_MATCH_MIDDLE / 2){
+    if(lx < DM_WGX / 2){
 
       lclTrg[lx * 2] = lclTrg[lx * 2] + 
                        lclTrg[lx * 2 + 1];
@@ -1226,11 +1191,11 @@ kernel void diffMiddle( global   float * tmp,
 
 #endif
 
-#if OUTPUT <= (WGX_MATCH_MIDDLE / 4)
+#if DM_OUTPUT <= (DM_WGX / 4)
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    if(lx < WGX_MATCH_MIDDLE / 4){
+    if(lx < DM_WGX / 4){
 
       lclTrg[lx * 4] = lclTrg[lx * 4] + lclTrg[lx * 4 + 2];
 
@@ -1238,11 +1203,11 @@ kernel void diffMiddle( global   float * tmp,
 
 #endif
 
-#if OUTPUT <= (WGX_MATCH_MIDDLE / 8)
+#if DM_OUTPUT <= (DM_WGX / 8)
 
     barrier(CLK_LOCAL_MEM_FENCE);
 
-    if(lx < WGX_MATCH_MIDDLE / 8){
+    if(lx < DM_WGX / 8){
 
       lclTrg[lx * 8] = lclTrg[lx * 8] + lclTrg[lx * 8 + 4];
 
@@ -1250,9 +1215,9 @@ kernel void diffMiddle( global   float * tmp,
 
 #endif
 
-#if OUTPUT <= (WGX_MATCH_MIDDLE / 16)
+#if DM_OUTPUT <= (DM_WGX / 16)
 
-    if(lx < WGX_MATCH_MIDDLE / 16){
+    if(lx < DM_WGX / 16){
 
       lclTrg[lx * 16] = lclTrg[lx * 16] + lclTrg[lx * 16 + 8];
 
@@ -1260,9 +1225,9 @@ kernel void diffMiddle( global   float * tmp,
 
 #endif
 
-#if OUTPUT <= (WGX_MATCH_MIDDLE / 32)
+#if DM_OUTPUT <= (DM_WGX / 32)
 
-    if(lx < WGX_MATCH_MIDDLE / 32){
+    if(lx < DM_WGX / 32){
 
       lclTrg[lx * 32] = lclTrg[lx * 32] + lclTrg[lx * 32 + 16];
 
@@ -1270,9 +1235,9 @@ kernel void diffMiddle( global   float * tmp,
 
 #endif
 
-#if OUTPUT <= (WGX_MATCH_MIDDLE / 64)
+#if DM_OUTPUT <= (DM_WGX / 64)
 
-    if(lx < WGX_MATCH_MIDDLE / 64){
+    if(lx < DM_WGX / 64){
 
       lclTrg[lx * 64] = lclTrg[lx * 64] + lclTrg[lx * 64 + 32];
 
@@ -1280,24 +1245,25 @@ kernel void diffMiddle( global   float * tmp,
 
 #endif
 
-    if(lx < OUTPUT){
+    if(lx < DM_OUTPUT){
 
       // first 16 fetch and write to global
-      diff[templateNo * (SEARCH_WIDTH * SEARCH_WIDTH * ROTATIONS_NO_MIDDLE) + (searchNo + targetStep * TARGETS_PER_LOOP) 
-                      * ROTATIONS_NO_MIDDLE + lx] = 
+      diff[templateNo * (DM_SEARCH_WIDTH * DM_SEARCH_WIDTH * DM_ROTATIONS_NO) + (searchNo + targetStep * DM_TARGETS_PER_LOOP) 
+                      * DM_ROTATIONS_NO + lx] = 
 
           (regionNo < 2 ? 
 
-              diff[templateNo * (SEARCH_WIDTH * SEARCH_WIDTH * ROTATIONS_NO_MIDDLE) + (searchNo + targetStep * TARGETS_PER_LOOP) 
-                              * ROTATIONS_NO_MIDDLE + lx]
+              diff[templateNo * (DM_SEARCH_WIDTH * DM_SEARCH_WIDTH * DM_ROTATIONS_NO) + (searchNo + targetStep * DM_TARGETS_PER_LOOP) 
+                              * DM_ROTATIONS_NO + lx]
                 
-                  : 0) + lclTrg[lx * (WGX_MATCH_MIDDLE / OUTPUT)];
+                  : 0) + lclTrg[lx * (DM_WGX / DM_OUTPUT)];
 
     }
 
   }
 
 }
+
 
 
 
